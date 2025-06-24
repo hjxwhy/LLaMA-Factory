@@ -1,0 +1,7 @@
+{
+  "data_root": "/your/data/root/path",
+  "llama_factory_root": "/your/llama/factory/root/path",
+  "log_level": "INFO",
+  "temp_dir": "/tmp",
+  "_comment": "This is a template configuration file for data mixing operations. Copy this file to 'data_mix_config.json' and modify the paths according to your environment."
+} 

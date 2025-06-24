@@ -180,3 +180,4 @@ predictions_score.json
 data/*
 examples/*
 tests/images
+inference/
