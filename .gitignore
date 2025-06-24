@@ -179,4 +179,4 @@ generated_predictions.jsonl
 predictions_score.json
 data/*
 examples/*
-test/*
+tests/images
