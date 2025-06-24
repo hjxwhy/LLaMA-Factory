@@ -51,7 +51,7 @@ class DatasetConverter:
         else:
             medias = medias[:]
 
-        if self.dataset_attr.load_from in ["script", "file"]:
+        if self.dataset_attr.load_from in ["script", "file", "hf_hub"]:
             if isinstance(medias[0], str):
                 for i in range(len(medias)):
                     media_path = os.path.join(self.data_args.media_dir, medias[i])
@@ -154,19 +154,28 @@ class SharegptDatasetConverter(DatasetConverter):
             messages = messages[1:]
         else:
             system = example[self.dataset_attr.system] if self.dataset_attr.system else ""
+        
+        if len(messages) > 0 and messages[0][self.dataset_attr.role_tag] == self.dataset_attr.system_tag: # hard code for fix the double system message
+            messages = messages[1:]
 
         aligned_messages = []
         broken_data = False
         for turn_idx, message in enumerate(messages):
             if message[self.dataset_attr.role_tag] not in accept_tags[turn_idx % 2]:
-                logger.warning_rank0(f"Invalid role tag in {messages}.")
+                logger.warning(f"Invalid role tag in {example}. tag: {message[self.dataset_attr.role_tag]}, accept_tags: {accept_tags[turn_idx % 2]}")
                 broken_data = True
                 break
-
+            
+            # qwen omni training, user message only using audio
+            not_audio_user_only = (message[self.dataset_attr.role_tag] not in odd_tags \
+                                                                          or "<audio>" not in message[self.dataset_attr.content_tag])
+            if self.dataset_attr.images and message[self.dataset_attr.role_tag] == "user" and example[self.dataset_attr.images] is not None:
+                if "<image>" not in message[self.dataset_attr.content_tag] and len(example[self.dataset_attr.images]) > 0 and turn_idx < 2:
+                    message[self.dataset_attr.content_tag] = "<image>" + message[self.dataset_attr.content_tag]
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[self.dataset_attr.role_tag]],
-                    "content": message[self.dataset_attr.content_tag],
+                    "content": message[self.dataset_attr.content_tag] if not_audio_user_only else "<audio>",
                 }
             )
 
@@ -214,6 +223,8 @@ class SharegptDatasetConverter(DatasetConverter):
         else:  # normal example
             prompt = aligned_messages[:-1]
             response = aligned_messages[-1:]
+        if example["id"] == "mask_history": # HACK: method for supervise last function call conversation turn (function_tag and assistant_tag)
+            response.insert(0, aligned_messages[-3])
 
         output = {
             "_prompt": prompt,

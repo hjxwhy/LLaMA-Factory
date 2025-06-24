@@ -25,3 +25,10 @@ pandas>=2.0.0
 av
 librosa
 tyro<0.9.0
+torchvision
+deepspeed
+flash-attn
+aiohttp>=3.9.0
+aiofiles>=23.2.0
+tqdm>=4.66.0
+requests>=2.31.0 

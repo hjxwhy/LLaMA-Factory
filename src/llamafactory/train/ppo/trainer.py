@@ -33,7 +33,7 @@ from transformers.trainer_pt_utils import remove_dummy_checkpoint
 from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
 from transformers.utils import SAFE_WEIGHTS_NAME, WEIGHTS_NAME
 from trl import PPOConfig, PPOTrainer
-from trl.core import PPODecorators, logprobs_from_logits
+from trl.core import PPODecorators
 from trl.models.utils import unwrap_model_for_generation
 from typing_extensions import override
 

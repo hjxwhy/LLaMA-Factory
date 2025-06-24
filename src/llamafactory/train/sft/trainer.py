@@ -39,6 +39,11 @@ if TYPE_CHECKING:
 
     from ...hparams import FinetuningArguments
 
+from transformers.integrations import is_deepspeed_available
+
+if is_deepspeed_available():
+    from deepspeed.accelerator import get_accelerator
+    from transformers.integrations import is_deepspeed_zero3_enabled
 
 logger = logging.get_logger(__name__)
 
@@ -119,7 +124,8 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
             labels = inputs.pop("labels", None)
         else:
             labels = inputs.get("labels")
-
+        if is_deepspeed_zero3_enabled(): # TODO: check if this is necessary
+            get_accelerator().empty_cache()
         loss, generated_tokens, _ = super().prediction_step(
             model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys, **gen_kwargs
         )

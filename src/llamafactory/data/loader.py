@@ -136,11 +136,12 @@ def _load_single_dataset(
             split=dataset_attr.split,
             cache_dir=model_args.cache_dir,
             token=model_args.hf_hub_token,
-            num_proc=data_args.preprocessing_num_workers,
+            num_proc=data_args.preprocessing_num_workers if not data_args.streaming else None,
             trust_remote_code=model_args.trust_remote_code,
             streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
         if data_args.streaming and dataset_attr.load_from == "file":
+            dataset = dataset.shuffle()
             dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
 
     if dataset_attr.num_samples is not None and not data_args.streaming:

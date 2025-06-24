@@ -40,7 +40,15 @@ class SupervisedDatasetProcessor(DatasetProcessor):
         videos: list["VideoInput"],
         audios: list["AudioInput"],
     ) -> tuple[list[int], list[int]]:
-        messages = self.template.mm_plugin.process_messages(prompt + response, images, videos, audios, self.processor)
+        mask_call_history = False
+        if len(response) > 1:
+            response = response[-1:] # HACK: for mask history, only use last function call turn, the data is multi turn function call
+            mask_call_history = True
+        try:
+            messages = self.template.mm_plugin.process_messages(prompt + response, images, videos, audios, self.processor)
+        except Exception as e:
+            logger.warning_rank0(f"raise error: {e} for data: {prompt + response}")
+            return None, None
         input_ids, labels = self.template.mm_plugin.process_token_ids(
             [], [], images, videos, audios, self.tokenizer, self.processor
         )
@@ -48,8 +56,13 @@ class SupervisedDatasetProcessor(DatasetProcessor):
         total_length = len(input_ids) + (1 if self.template.efficient_eos else 0)
         if self.data_args.mask_history:
             encoded_pairs = encoded_pairs[::-1]  # high priority for last turns
+        if mask_call_history:
+            encoded_pairs = encoded_pairs[::-1] # high priority for last turns
 
         for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
+            if total_length + len(source_ids) + len(target_ids) > self.data_args.cutoff_len:
+                input_ids, labels = None, None # HACK: for multi model data too long will raise error, return None for abort this example
+                break
             if total_length >= self.data_args.cutoff_len:
                 break
 
@@ -69,10 +82,12 @@ class SupervisedDatasetProcessor(DatasetProcessor):
 
             if self.data_args.mask_history and turn_idx != 0:  # train on the last turn only
                 target_label = [IGNORE_INDEX] * target_len
+            elif mask_call_history and turn_idx not in [0, 1]:
+                target_label = [IGNORE_INDEX] * target_len
             else:
                 target_label = target_ids
 
-            if self.data_args.mask_history:  # reversed sequences
+            if self.data_args.mask_history or mask_call_history:  # reversed sequences
                 input_ids = source_ids + target_ids + input_ids
                 labels = source_label + target_label + labels
             else:
@@ -90,7 +105,8 @@ class SupervisedDatasetProcessor(DatasetProcessor):
         # for multiturn examples, we only mask the prompt part in each prompt-response pair.
         model_inputs = defaultdict(list)
         for i in range(len(examples["_prompt"])):
-            if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
+            has_tools = examples["_tools"][i] is not None and examples["_tools"][i] != "" # only check for not tools data, because the HACK
+            if len(examples["_prompt"][i]) % 2 != 1 or (len(examples["_response"][i]) != 1 and not has_tools):
                 logger.warning_rank0(
                     "Dropped invalid example: {}".format(examples["_prompt"][i] + examples["_response"][i])
                 )
@@ -105,6 +121,9 @@ class SupervisedDatasetProcessor(DatasetProcessor):
                 videos=examples["_videos"][i] or [],
                 audios=examples["_audios"][i] or [],
             )
+            if input_ids is None:
+                logger.warning_rank0(f"Dropped lengthy example with length  > {self.data_args.cutoff_len}.")
+                continue
             model_inputs["input_ids"].append(input_ids)
             model_inputs["attention_mask"].append([1] * len(input_ids))
             model_inputs["labels"].append(labels)

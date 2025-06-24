@@ -23,6 +23,8 @@ import torch
 import torch.nn.functional as F
 from peft import PeftModel
 from transformers import DataCollatorForSeq2Seq
+import pickle
+import os
 
 from ..extras.constants import AUDIO_PLACEHOLDER, IGNORE_INDEX, IMAGE_PLACEHOLDER
 from ..extras.packages import is_pillow_available
@@ -200,13 +202,20 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
                 if feature_attention_mask is not None:  # FIXME: need to get video image lengths
                     audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
                     rope_index_kwargs["audio_seqlens"] = audio_feature_lengths  # prepare for input
-
-                features["position_ids"], rope_deltas = self.get_rope_func(**rope_index_kwargs)
+                try:
+                    features["position_ids"], rope_deltas = self.get_rope_func(**rope_index_kwargs)
+                except Exception as e:
+                    _save_debug_data_on_rope_error(e, rope_index_kwargs, features, mm_inputs, self.model, self.processor)
+                    raise IOError
                 features["rope_deltas"] = rope_deltas - (1 - rope_index_kwargs["attention_mask"]).sum(
                     dim=-1
                 ).unsqueeze(-1)
             else:  # for qwen2vl
-                features["position_ids"], features["rope_deltas"] = self.get_rope_func(**rope_index_kwargs)
+                try:
+                    features["position_ids"], features["rope_deltas"] = self.get_rope_func(**rope_index_kwargs)
+                except Exception as e:
+                    _save_debug_data_on_rope_error(e, rope_index_kwargs, features, mm_inputs, self.model, self.processor)
+                    raise IOError
 
         if (
             self.model is not None
@@ -319,3 +328,70 @@ class KTODataCollatorWithPadding(MultiModalDataCollatorForSeq2Seq):
 
         batch["kto_tags"] = torch.tensor(kto_tags)
         return batch
+
+
+def _save_debug_data_on_rope_error(
+    exception: Exception,
+    rope_index_kwargs: dict,
+    features: dict,
+    mm_inputs: dict,
+    model: Any,
+    processor: Any,
+    debug_dir_suffix: str = ""
+) -> None:
+    """Save debugging data when rope index error occurs."""
+    debug_dir = f"debug_rope_index_error{debug_dir_suffix}"
+    os.makedirs(debug_dir, exist_ok=True)
+    
+    print(f"DEBUG: Exception in get_rope_index: {exception}")
+    
+    # Save rope_index_kwargs
+    rope_kwargs_file = os.path.join(debug_dir, "rope_index_kwargs.pkl")
+    with open(rope_kwargs_file, 'wb') as f:
+        # Convert tensors to CPU for saving
+        rope_kwargs_cpu = {}
+        for key, value in rope_index_kwargs.items():
+            if torch.is_tensor(value):
+                rope_kwargs_cpu[key] = value.cpu()
+            else:
+                rope_kwargs_cpu[key] = value
+        pickle.dump(rope_kwargs_cpu, f)
+    print(f"DEBUG: Saved rope_index_kwargs to {rope_kwargs_file}")
+    
+    # Save features
+    features_file = os.path.join(debug_dir, "features.pkl")
+    with open(features_file, 'wb') as f:
+        # Convert tensors to CPU for saving
+        features_cpu = {}
+        for key, value in features.items():
+            if torch.is_tensor(value):
+                features_cpu[key] = value.cpu()
+            else:
+                features_cpu[key] = value
+        pickle.dump(features_cpu, f)
+    print(f"DEBUG: Saved features to {features_file}")
+    
+    # Save mm_inputs for additional context
+    mm_inputs_file = os.path.join(debug_dir, "mm_inputs.pkl")
+    with open(mm_inputs_file, 'wb') as f:
+        # Convert tensors to CPU for saving
+        mm_inputs_cpu = {}
+        for key, value in mm_inputs.items():
+            if torch.is_tensor(value):
+                mm_inputs_cpu[key] = value.cpu()
+            else:
+                mm_inputs_cpu[key] = value
+        pickle.dump(mm_inputs_cpu, f)
+    print(f"DEBUG: Saved mm_inputs to {mm_inputs_file}")
+    
+    # Save model config info
+    model_info_file = os.path.join(debug_dir, "model_info.txt")
+    with open(model_info_file, 'w') as f:
+        f.write(f"Model type: {getattr(model.config, 'model_type', 'Unknown')}\n")
+        f.write(f"Model config: {model.config}\n")
+        f.write(f"Processor type: {type(processor)}\n")
+        f.write(f"Exception: {str(exception)}\n")
+        f.write(f"Exception type: {type(exception)}\n")
+    print(f"DEBUG: Saved model info to {model_info_file}")
+    
+    print(f"DEBUG: All debugging data saved to {debug_dir}/")

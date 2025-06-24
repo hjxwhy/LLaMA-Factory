@@ -264,6 +264,17 @@ class QwenToolUtils(ToolUtils):
     @override
     @staticmethod
     def tool_formatter(tools: list[dict[str, Any]]) -> str:
+        # data problems, some data is list of list of dict, so we need to flatten it
+        def to_list_of_dict(tools: dict[str, Any]) -> list[dict[str, Any]]:
+            res = []
+            for tool in tools:
+                if isinstance(tool, list):
+                    res.extend(to_list_of_dict(tool))
+                else:
+                    res.append(tool)
+            return res
+
+        tools = to_list_of_dict(tools)
         tool_text = ""
         for tool in tools:
             wrapped_tool = tool if tool.get("type") == "function" else {"type": "function", "function": tool}

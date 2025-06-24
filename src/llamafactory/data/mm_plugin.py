@@ -197,21 +197,21 @@ class MMPluginMixin:
         r"""Validate if the number of images, videos and audios match the number of placeholders in messages."""
         num_image_tokens, num_video_tokens, num_audio_tokens = 0, 0, 0
         for message in messages:
-            num_image_tokens += message["content"].count(IMAGE_PLACEHOLDER)
-            num_video_tokens += message["content"].count(VIDEO_PLACEHOLDER)
-            num_audio_tokens += message["content"].count(AUDIO_PLACEHOLDER)
+            num_image_tokens += message["content"].count(IMAGE_PLACEHOLDER) if len(images) != 0 else 0 # some text content has image placeholder
+            num_video_tokens += message["content"].count(VIDEO_PLACEHOLDER) if len(videos) != 0 else 0
+            num_audio_tokens += message["content"].count(AUDIO_PLACEHOLDER) if len(audios) != 0 else 0
 
-        if len(images) != num_image_tokens:
+        if len(images) != num_image_tokens and self.image_token:
             raise ValueError(
                 f"The number of images does not match the number of {IMAGE_PLACEHOLDER} tokens in {messages}."
             )
 
-        if len(videos) != num_video_tokens:
+        if len(videos) != num_video_tokens and self.video_token:
             raise ValueError(
                 f"The number of videos does not match the number of {VIDEO_PLACEHOLDER} tokens in {messages}."
             )
 
-        if len(audios) != num_audio_tokens:
+        if len(audios) != num_audio_tokens and self.audio_token:
             raise ValueError(
                 f"The number of audios does not match the number of {AUDIO_PLACEHOLDER} tokens in {messages}."
             )
@@ -1585,7 +1585,7 @@ class Qwen2OmniPlugin(Qwen2VLPlugin):
 
         for message in messages:
             content = message["content"]
-            while IMAGE_PLACEHOLDER in content:
+            while IMAGE_PLACEHOLDER in content and self.image_token and len(images) > 0: # some text content has image placeholder
                 image_seqlen = image_grid_thw[num_image_tokens].prod() // merge_length if self.expand_mm_tokens else 1
                 content = content.replace(
                     IMAGE_PLACEHOLDER, f"<|vision_bos|>{self.image_token * image_seqlen}<|vision_eos|>", 1
@@ -1600,7 +1600,7 @@ class Qwen2OmniPlugin(Qwen2VLPlugin):
                         f"Number of videos ({len(videos)}) must match number of audios ({len(audios)}) when using audio in video."
                     )
 
-                while VIDEO_PLACEHOLDER in content:
+                while VIDEO_PLACEHOLDER in content and self.video_token and len(videos) > 0:
                     video_pos = content.find(VIDEO_PLACEHOLDER)
                     audio_pos = content.find(AUDIO_PLACEHOLDER, video_pos)
                     if audio_pos == -1 or audio_pos < video_pos:
@@ -1641,14 +1641,18 @@ class Qwen2OmniPlugin(Qwen2VLPlugin):
                     num_audio_tokens += 1
                     num_video_tokens += 1
             else:
-                while AUDIO_PLACEHOLDER in content:
-                    audio_seqlen = audio_lengths[num_audio_tokens] if self.expand_mm_tokens else 1
+                while AUDIO_PLACEHOLDER in content and self.audio_token and len(audios) > 0:
+                    try:
+                        audio_seqlen = audio_lengths[num_audio_tokens] if self.expand_mm_tokens else 1
+                    except:
+                        print(f"messages: {messages}") # i have forget why set this, but it's important, a bug still not found, some data will raise error
+                        raise
                     content = content.replace(
                         AUDIO_PLACEHOLDER, f"<|audio_bos|>{self.audio_token * audio_seqlen}<|audio_eos|>", 1
                     )
                     num_audio_tokens += 1
 
-                while VIDEO_PLACEHOLDER in content:
+                while VIDEO_PLACEHOLDER in content and self.video_token and len(videos) > 0:
                     video_seqlen = (
                         video_grid_thw[num_video_tokens].prod() // merge_length if self.expand_mm_tokens else 1
                     )
