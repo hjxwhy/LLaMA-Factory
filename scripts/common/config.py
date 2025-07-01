@@ -13,7 +13,7 @@ class DatasetConfig:
     output_path: str
     batch_size: int = 1000
     max_workers: int = 8
-    skip_existing: bool = True
+    skip_existing: bool = False
     
 
 @dataclass
@@ -29,6 +29,7 @@ class LLaVAConfig(DatasetConfig):
 
 @dataclass
 class PixmoConfig(DatasetConfig):
+    name: str = "pixmo-points"
     # Download settings
     max_concurrent: int = 100
     timeout: int = 30

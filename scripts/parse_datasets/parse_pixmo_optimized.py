@@ -662,68 +662,154 @@ class PixmoParser(DatasetProcessor):
             w, h = image.size
             h_resized, w_resized = smart_resize(h, w)
             
-            # Process points
-            points = data["points"]
-            label = data["label"]
+            relative_image_path = os.path.join(os.path.basename(self.config.output_path), "images", f"{calculated_hash}.png")
             
-            if len(points) < 1:
-                # No points case
-                prompt_type = "pointing_json" if np.random.rand() < 0.5 else "pointing_xml"
-                prompt = GENERAL_PROMPTS[prompt_type][0]
-                prompt = prompt.format(label=label)
-                points_text = "This isn't in the image."
-            else:
-                # Convert points to numpy array
-                points_array = np.stack([[x["x"] for x in points], [x["y"] for x in points]], -1)
-                
-                # Random choice from conversion functions
-                convert_func = np.random.choice([self.points_to_text_xml, self.points_to_text_json])
-                points_text = convert_func(points_array.copy(), (100 / w_resized, 100 / h_resized), label, label)
-                
-                # Choose appropriate prompt type
-                prompt_type = "pointing_xml" if convert_func == self.points_to_text_xml else "pointing_json"
-                prompt = GENERAL_PROMPTS[prompt_type][np.random.randint(0, len(GENERAL_PROMPTS[prompt_type]))]
-                prompt = prompt.format(label=label)
+            # Generate messages for different task types
+            task_messages = self.generate_messages(data, (w, h, w_resized, h_resized))
             
-            # Create main pointing task
-            messages = [
-                {"content": "<image>" + prompt, "role": "user"},
-                {"content": points_text, "role": "assistant"}
-            ]
-            
-            relative_image_path = os.path.join("pixmo-points", "images", f"{calculated_hash}.png")
-            data_item = {
-                "messages": messages,
-                "images": [relative_image_path],
-                "id": "pointing",
-            }
-            data_items.append(data_item)
-            
-            # Add counting task occasionally
-            if np.random.rand() < 0.2 and len(points) > 0:
-                prompt_type = "point_count" if np.random.rand() < 0.5 else "count_then_point"
-                prompt = GENERAL_PROMPTS[prompt_type][np.random.randint(0, len(GENERAL_PROMPTS[prompt_type]))]
-                prompt = prompt.format(label=label)
-                
-                if prompt_type == "point_count":
-                    points_text = f"Counting the {label} shows a total of {len(points)}."
-                else:
-                    points_text = f"Counting the {label} shows a total of {len(points)}. " + \
-                                 self.points_to_text_xml(points_array.copy(), (100 / w_resized, 100 / h_resized), label, label)
-                
-                messages = [
-                    {"content": "<image>" + prompt, "role": "user"},
-                    {"content": points_text, "role": "assistant"}
-                ]
-                
+            for task_data in task_messages:
                 data_item = {
-                    "messages": messages,
+                    "messages": task_data["messages"],
                     "images": [relative_image_path],
-                    "id": prompt_type,
+                    "id": task_data["id"],
                 }
                 data_items.append(data_item)
         
         return data_items
+    
+    def generate_messages(self, data: Dict[str, Any], image_info: Tuple[int, int, int, int]) -> List[Dict[str, Any]]:
+        """
+        Generate messages for different types of tasks (pointing, counting, QA)
+        
+        Args:
+            data: Dictionary containing the data (points, label, question, answer, etc.)
+            image_info: Tuple of (original_width, original_height, resized_width, resized_height)
+            
+        Returns:
+            List of task data dictionaries with messages and task IDs
+        """
+        w, h, w_resized, h_resized = image_info
+        task_messages = []
+        
+        # Check data type and generate appropriate messages
+        if "points" in data and "label" in data:
+            # Pointing task data
+            task_messages.extend(self._generate_pointing_messages(data, w_resized, h_resized))
+        elif "question" in data and "answer" in data:
+            # QA task data
+            task_messages.extend(self._generate_qa_messages(data))
+        elif "conversations" in data:
+            # Conversation format data
+            task_messages.extend(self._generate_conversation_messages(data))
+        else:
+            # Try to infer from available fields
+            self.log_progress(f"Unknown data format: {list(data.keys())}", "warning")
+        
+        return task_messages
+    
+    def _generate_pointing_messages(self, data: Dict[str, Any], w_resized: int, h_resized: int) -> List[Dict[str, Any]]:
+        """Generate messages for pointing tasks"""
+        messages = []
+        points = data["points"]
+        label = data["label"]
+        
+        if len(points) < 1:
+            # No points case
+            prompt_type = "pointing_json" if np.random.rand() < 0.5 else "pointing_xml"
+            prompt = GENERAL_PROMPTS[prompt_type][0]
+            prompt = prompt.format(label=label)
+            points_text = "This isn't in the image."
+        else:
+            # Convert points to numpy array
+            points_array = np.stack([[x["x"] for x in points], [x["y"] for x in points]], -1)
+            
+            # Random choice from conversion functions
+            convert_func = np.random.choice([self.points_to_text_xml, self.points_to_text_json])
+            points_text = convert_func(points_array.copy(), (100 / w_resized, 100 / h_resized), label, label)
+            
+            # Choose appropriate prompt type
+            prompt_type = "pointing_xml" if convert_func == self.points_to_text_xml else "pointing_json"
+            prompt = GENERAL_PROMPTS[prompt_type][np.random.randint(0, len(GENERAL_PROMPTS[prompt_type]))]
+            prompt = prompt.format(label=label)
+        
+        # Create main pointing task
+        pointing_messages = [
+            {"content": "<image>" + prompt, "role": "user"},
+            {"content": points_text, "role": "assistant"}
+        ]
+        
+        messages.append({
+            "messages": pointing_messages,
+            "id": "pointing"
+        })
+        
+        # Add counting task occasionally
+        if np.random.rand() < 0.2 and len(points) > 0:
+            points_array = np.stack([[x["x"] for x in points], [x["y"] for x in points]], -1)
+            prompt_type = "point_count" if np.random.rand() < 0.5 else "count_then_point"
+            prompt = GENERAL_PROMPTS[prompt_type][np.random.randint(0, len(GENERAL_PROMPTS[prompt_type]))]
+            prompt = prompt.format(label=label)
+            
+            if prompt_type == "point_count":
+                points_text = f"Counting the {label} shows a total of {len(points)}."
+            else:
+                points_text = f"Counting the {label} shows a total of {len(points)}. " + \
+                             self.points_to_text_xml(points_array.copy(), (100 / w_resized, 100 / h_resized), label, label)
+            
+            counting_messages = [
+                {"content": "<image>" + prompt, "role": "user"},
+                {"content": points_text, "role": "assistant"}
+            ]
+            
+            messages.append({
+                "messages": counting_messages,
+                "id": prompt_type
+            })
+        
+        return messages
+    
+    def _generate_qa_messages(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate messages for QA tasks"""
+        question = data["question"]
+        answer = data["answer"]
+        
+        qa_messages = [
+            {"content": "<image>" + question, "role": "user"},
+            {"content": answer, "role": "assistant"}
+        ]
+        
+        return [{
+            "messages": qa_messages,
+            "id": "pixmo-ask-anything"
+        }]
+    
+    def _generate_conversation_messages(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Generate messages for conversation format data"""
+        conversations = data["conversations"]
+        
+        # Convert conversations to messages format
+        messages = []
+        for conv in conversations:
+            if "from" in conv and "value" in conv:
+                role = "user" if conv["from"] in ["human", "user"] else "assistant"
+                content = conv["value"]
+                
+                # Add <image> token to first user message if not present
+                if role == "user" and len(messages) == 0 and "<image>" not in content:
+                    content = "<image>" + content
+                
+                messages.append({
+                    "content": content,
+                    "role": role
+                })
+        
+        if messages:
+            return [{
+                "messages": messages,
+                "id": "conversation"
+            }]
+        else:
+            return []
     
     async def process_dataset_async(self) -> bool:
         """
@@ -744,37 +830,43 @@ class PixmoParser(DatasetProcessor):
                 self.log_progress("Failed to load dataset", "error")
                 return False
             
-            # Download images
-            if not await self.download_images(dataset):
-                return False
-            
-            # Create updated dataset with calculated_hash field
-            self.log_progress("Creating updated dataset with calculated_hash field...")
-            updated_data = []
-            for i, example in enumerate(dataset):
-                updated_example = dict(example)
-                updated_example['calculated_hash'] = self.calculated_hashes.get(i, "")
-                updated_data.append(updated_example)
-            
-            # Save updated dataset
-            self.log_progress("Saving updated dataset...")
-            updated_dataset = Dataset.from_list(updated_data)
-            dataset_output_path = os.path.join(self.config.output_path, "pixmo-points-with-calculated-hash")
-            updated_dataset.save_to_disk(dataset_output_path)
-            self.log_progress(f"Updated dataset saved to: {dataset_output_path}")
+            # if exist calculated_hash, skip download images
+            if not self.config.skip_existing:
+                # Download images
+                if not await self.download_images(dataset):
+                    return False
+                
+                # Create updated dataset with calculated_hash field
+                self.log_progress("Creating updated dataset with calculated_hash field...")
+                updated_data = []
+                for i, example in enumerate(dataset):
+                    updated_example = dict(example)
+                    updated_example['calculated_hash'] = self.calculated_hashes.get(i, "")
+                    updated_data.append(updated_example)
+                
+                # Save updated dataset
+                self.log_progress("Saving updated dataset...")
+                updated_dataset = Dataset.from_list(updated_data)
+                dataset_output_path = os.path.join(self.config.output_path, f"{self.config.name}-with-calculated-hash")
+                updated_dataset.save_to_disk(dataset_output_path)
+                self.log_progress(f"Updated dataset saved to: {dataset_output_path}")
+            else:
+                # Load updated dataset from disk
+                dataset_output_path = os.path.join(self.config.output_path, f"{self.config.name}-with-calculated-hash")
+                updated_data = Dataset.load_from_disk(dataset_output_path)
             
             # Convert to LLaMA-Factory format
             converted_data = self.convert_points_to_llamafactory_format(updated_data)
             
             # Save final output
             if self.config.output_jsonl:
-                output_file = os.path.join(self.config.output_path, "pixmo-points-llama-factory.jsonl")
+                output_file = os.path.join(self.config.output_path, f"{self.config.name}-llama-factory.jsonl")
                 if save_jsonl_data(converted_data, output_file):
                     self.log_progress(f"LLaMA-Factory format data saved to {output_file}")
                 else:
                     return False
             else:
-                output_file = os.path.join(self.config.output_path, "pixmo-points-llama-factory.json") 
+                output_file = os.path.join(self.config.output_path, f"{self.config.name}-llama-factory.json") 
                 if save_json_data(converted_data, output_file):
                     self.log_progress(f"LLaMA-Factory format data saved to {output_file}")
                 else:
@@ -824,6 +916,8 @@ def main():
     """Main entry point"""
     # Parse command line arguments
     parser = setup_argparse("Pixmo-Points")
+    parser.add_argument('--name', type=str, default="pixmo-points",
+                       help='Name of the dataset')
     parser.add_argument('--max-concurrent', type=int, default=100,
                        help='Maximum concurrent downloads')
     parser.add_argument('--timeout', type=int, default=30,
