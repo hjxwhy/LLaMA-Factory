@@ -128,6 +128,7 @@ def _load_single_dataset(
     elif dataset_attr.load_from == "cloud_file":
         dataset = Dataset.from_list(read_cloud_json(data_path), split=dataset_attr.split)
     else:
+        # data_args.streaming = False
         dataset = load_dataset(
             path=data_path,
             name=data_name,
@@ -140,7 +141,8 @@ def _load_single_dataset(
             trust_remote_code=model_args.trust_remote_code,
             streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
-        if data_args.streaming and dataset_attr.load_from == "file":
+        # data_args.streaming = True
+        if data_args.streaming and dataset_attr.load_from in ["file", "hf_hub"]:
             dataset = dataset.shuffle()
             dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
 

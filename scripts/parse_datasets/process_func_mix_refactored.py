@@ -141,6 +141,25 @@ class DataMixer:
             shard = dataset.shard(num_shards=num_shards, index=i)
             shard.to_parquet(f"{output_path}/train-{i:05d}-of-{num_shards:05d}.parquet")
 
+    def filter_dataset_features(self, dataset, dataset_name):
+        """Filter dataset to keep only required features: [id, tools, images, audios, messages]"""
+        if len(dataset) == 0:
+            print(f"{dataset_name}: 0 samples")
+            return dataset
+            
+        required_features = ["id", "tools", "images", "audios", "messages"]
+        current_features = list(dataset.features.keys())
+        
+        # Find features to remove
+        features_to_remove = [f for f in current_features if f not in required_features]
+        
+        if features_to_remove:
+            print(f"Removing features {features_to_remove} from {dataset_name}")
+            dataset = dataset.remove_columns(features_to_remove)
+        
+        print(f"{dataset_name}: {len(dataset)} samples")
+        return dataset
+
     def remove_audio_tag(self, example):
         """Remove audio tags from messages"""
         for message in example["messages"]:
@@ -612,12 +631,15 @@ class DataMixer:
         # ===== New functionality from test.py =====
         print("Creating unitree dataset with appended tools...")
         unitree_dataset_append_tools = self.create_unitree_dataset_append_tools()
+        unitree_dataset_append_tools = self.filter_dataset_features(unitree_dataset_append_tools, "unitree_dataset_append_tools")
         
         print("Creating unitree dataset with randomly removed audio...")
         unitree_dataset_randomremoveaudio = self.create_unitree_dataset_randomremoveaudio()
+        unitree_dataset_randomremoveaudio = self.filter_dataset_features(unitree_dataset_randomremoveaudio, "unitree_dataset_randomremoveaudio")
         
         print("Creating unitree toolcall mixed dataset...")
         unitree_toolcall_mixed_dataset = self.create_unitree_toolcall_mixed_dataset()
+        unitree_toolcall_mixed_dataset = self.filter_dataset_features(unitree_toolcall_mixed_dataset, "unitree_toolcall_mixed_dataset")
         
         # Merge the three new datasets
         new_datasets_to_merge = []
@@ -628,13 +650,14 @@ class DataMixer:
         if new_datasets_to_merge:
             merged_new_dataset = concatenate_datasets(new_datasets_to_merge).shuffle(seed=44)
             print(f"Merged new datasets size: {len(merged_new_dataset)}")
+            merged_new_dataset = self.filter_dataset_features(merged_new_dataset, "merged_new_dataset")
         else:
             merged_new_dataset = Dataset.from_list([])
         
         # ===== Original functionality =====
         print("Loading Unitree toolcall datasets...")
         unitree_toolcall_dataset = self.load_json_dataset(self.config.unitree_toolcall_path)
-        unitree_toolcall_dataset_mix = Dataset.load_from_disk(self.config.unitree_toolcall_mix_path) if os.path.exists(self.config.unitree_toolcall_mix_path) else Dataset.from_list([])
+        unitree_toolcall_dataset_mix = self.load_json_dataset(self.config.unitree_toolcall_mix_path) if os.path.exists(self.config.unitree_toolcall_mix_path) else Dataset.from_list([])
         unitree_toolcall_mask_history_dataset = self.load_json_dataset(self.config.unitree_mask_history_path)
         
         datasets_to_concat = [d for d in [unitree_toolcall_dataset, unitree_toolcall_dataset_mix, unitree_toolcall_mask_history_dataset] if len(d) > 0]
@@ -642,6 +665,7 @@ class DataMixer:
             unitree_toolcall_dataset = concatenate_datasets(datasets_to_concat)
         else:
             unitree_toolcall_dataset = Dataset.from_list([])
+        unitree_toolcall_dataset = self.filter_dataset_features(unitree_toolcall_dataset, "unitree_toolcall_dataset")
 
         print("Loading Tulu dataset...")
         if os.path.exists(self.config.tulu_path):
@@ -651,6 +675,7 @@ class DataMixer:
         else:
             self.logger.warning(f"Tulu dataset not found: {self.config.tulu_path}")
             tulu_dataset = Dataset.from_list([])
+        tulu_dataset = self.filter_dataset_features(tulu_dataset, "tulu_dataset")
         gc.collect()
 
         print("Loading Glaive function calling dataset...")
@@ -666,11 +691,14 @@ class DataMixer:
                 glaive_function_calling_dataset_longer = glaive_function_calling_dataset_longer.remove_columns(["audios"])
         else:
             glaive_function_calling_dataset_longer = Dataset.from_list([])
+        glaive_function_calling_dataset = self.filter_dataset_features(glaive_function_calling_dataset, "glaive_function_calling_dataset")
+        glaive_function_calling_dataset_longer = self.filter_dataset_features(glaive_function_calling_dataset_longer, "glaive_function_calling_dataset_longer")
 
-        print("Loading XLAM dataset...")
+        print("Loading XLAM dataset...") # text only
         xlam_dataset = self.load_json_dataset(self.config.xlam_path)
         if len(xlam_dataset) > 0:
             xlam_dataset = xlam_dataset.map(self.convert_xlam2messages, remove_columns=["query", "answers"] if "query" in xlam_dataset.column_names else [])
+        xlam_dataset = self.filter_dataset_features(xlam_dataset, "xlam_dataset")
 
         # Get all tools
         print("Extracting tools...")
@@ -680,33 +708,37 @@ class DataMixer:
 
         print("Loading LLaVA OneVision dataset...")
         if os.path.exists(self.config.llava_onevision_path):
-            llave_onevision_dataset = load_dataset(self.config.llava_onevision_path)["train"]
-            if "tools" in llave_onevision_dataset.column_names:
-                llave_onevision_dataset = llave_onevision_dataset.remove_columns(["tools"])
-            llave_onevision_dataset = llave_onevision_dataset.shuffle()
-            print("llave_onevision_dataset", len(llave_onevision_dataset))
-            llava_onevision_dataset = llave_onevision_dataset.filter(lambda x: len(x["images"]) > 0)
+            llava_onevision_dataset = load_dataset(self.config.llava_onevision_path)["train"]
+            if "tools" in llava_onevision_dataset.column_names:
+                llava_onevision_dataset = llava_onevision_dataset.remove_columns(["tools"])
+            llava_onevision_dataset = llava_onevision_dataset.shuffle()
+            print("llava_onevision_dataset", len(llava_onevision_dataset))
+            llava_onevision_dataset = llava_onevision_dataset.filter(lambda x: len(x["images"]) > 0)
             print("llava_onevision_dataset after filter", len(llava_onevision_dataset))
 
             # Randomly select items matching Tulu dataset size
-            total_items = len(llave_onevision_dataset)
+            total_items = len(llava_onevision_dataset)
             selection_size = len(tulu_dataset)
             if total_items > selection_size:
                 random_indices = random.sample(range(total_items), selection_size)
-                llave_onevision_dataset = llave_onevision_dataset.select(random_indices)
+                llava_onevision_dataset = llava_onevision_dataset.select(random_indices)
             else:
-                print(f"Note: llave_onevision_dataset contains only {total_items} items, which is less than {selection_size}")
+                print(f"Note: llava_onevision_dataset contains only {total_items} items, which is less than {selection_size}")
         else:
-            llave_onevision_dataset = Dataset.from_list([])
+            llava_onevision_dataset = Dataset.from_list([])
+        llava_onevision_dataset = self.filter_dataset_features(llava_onevision_dataset, "llava_onevision_dataset")
         gc.collect()
 
         print("Processing samples with tools...")
         tulu_samples_with_tools = self.add_random_tools_to_samples(
             tulu_dataset, tools, self.config.num_tulu_tools_samples
         )
+        tulu_samples_with_tools = self.filter_dataset_features(tulu_samples_with_tools, "tulu_samples_with_tools")
+        
         llava_samples_with_tools = self.add_random_tools_to_samples(
-            llave_onevision_dataset, tools, self.config.num_llava_tools_samples
+            llava_onevision_dataset, tools, self.config.num_llava_tools_samples
         )
+        llava_samples_with_tools = self.filter_dataset_features(llava_samples_with_tools, "llava_samples_with_tools")
 
         print("Loading voice dataset...")
         if os.path.exists(self.config.voice_assistant_path):
@@ -717,6 +749,8 @@ class DataMixer:
         else:
             voice_dataset = Dataset.from_list([])
             voice_samples_with_tools = Dataset.from_list([])
+        voice_dataset = self.filter_dataset_features(voice_dataset, "voice_dataset")
+        voice_samples_with_tools = self.filter_dataset_features(voice_samples_with_tools, "voice_samples_with_tools")
 
         print("Loading system prompt dataset...")
         if os.path.exists(self.config.system_prompt_path):
@@ -729,12 +763,16 @@ class DataMixer:
         else:
             system_prompt_dataset = Dataset.from_list([])
             system_prompt_samples_with_tools = Dataset.from_list([])
+        system_prompt_dataset = self.filter_dataset_features(system_prompt_dataset, "system_prompt_dataset")
+        system_prompt_samples_with_tools = self.filter_dataset_features(system_prompt_samples_with_tools, "system_prompt_samples_with_tools")
 
         print("Loading Unitree dataset...")
         unitree_dataset = self.load_unitree_dataset()
         unitree_samples_with_tools = self.add_random_tools_to_samples(
             unitree_dataset, tools, self.config.num_unitree_tools_samples
         )
+        unitree_dataset = self.filter_dataset_features(unitree_dataset, "unitree_dataset")
+        unitree_samples_with_tools = self.filter_dataset_features(unitree_samples_with_tools, "unitree_samples_with_tools")
 
         # Extract system prompts
         system_prompts = []
@@ -747,16 +785,19 @@ class DataMixer:
         tulu_with_system = tulu_selected.map(
             lambda example: self.add_system_prompt(example, system_prompts)
         )
+        tulu_with_system = self.filter_dataset_features(tulu_with_system, "tulu_with_system")
 
         llava_selected = llava_samples_with_tools.shuffle().select(range(min(self.config.num_selected_with_system, len(llava_samples_with_tools))))
         llava_with_system = llava_selected.map(
             lambda example: self.add_system_prompt(example, system_prompts)
         )
+        llava_with_system = self.filter_dataset_features(llava_with_system, "llava_with_system")
 
         voice_selected = voice_samples_with_tools.shuffle().select(range(min(self.config.num_selected_with_system, len(voice_samples_with_tools))))
         voice_with_system = voice_selected.map(
             lambda example: self.add_system_prompt(example, system_prompts)
         )
+        voice_with_system = self.filter_dataset_features(voice_with_system, "voice_with_system")
 
         print("Loading augmented dataset...")
         if os.path.exists(self.config.aug_dataset_path):
@@ -773,25 +814,29 @@ class DataMixer:
         glaive_dataset_with_aug = glaive_dataset_with_aug.map(
             lambda example: self.add_system_prompt(example, aug_messages)
         )
+        glaive_dataset_with_aug = self.filter_dataset_features(glaive_dataset_with_aug, "glaive_dataset_with_aug")
 
         xlam_dataset_with_aug = xlam_dataset.shuffle().select(range(min(self.config.num_xlam_aug_samples, len(xlam_dataset))))
         xlam_dataset_with_aug = xlam_dataset_with_aug.map(
             lambda example: self.add_system_prompt(example, aug_messages)
         )
+        xlam_dataset_with_aug = self.filter_dataset_features(xlam_dataset_with_aug, "xlam_dataset_with_aug")
 
-        llave_onevision_dataset_with_aug = llave_onevision_dataset.shuffle().select(range(min(self.config.num_llava_aug_samples, len(llave_onevision_dataset))))
+        llave_onevision_dataset_with_aug = llava_onevision_dataset.shuffle().select(range(min(self.config.num_llava_aug_samples, len(llava_onevision_dataset))))
         llave_onevision_dataset_with_aug = llave_onevision_dataset_with_aug.map(
             lambda example: self.add_system_prompt(example, aug_messages)
         )
+        llave_onevision_dataset_with_aug = self.filter_dataset_features(llave_onevision_dataset_with_aug, "llave_onevision_dataset_with_aug")
 
         voice_dataset_with_aug = voice_dataset.shuffle().select(range(min(self.config.num_voice_aug_samples, len(voice_dataset))))
         voice_dataset_with_aug = voice_dataset_with_aug.map(
             lambda example: self.add_system_prompt(example, aug_messages)
         )
+        voice_dataset_with_aug = self.filter_dataset_features(voice_dataset_with_aug, "voice_dataset_with_aug")
 
         print("Loading tools with audio datasets...")
         tools_with_audio_path = [
-            self.config.glaive_toolcall_en_demo_path,
+            # self.config.glaive_toolcall_en_demo_path, # remove en
             self.config.glaive_toolcall_zh_demo_path
         ]
         available_paths = [p for p in tools_with_audio_path if os.path.exists(p)]
@@ -802,14 +847,16 @@ class DataMixer:
             )
         else:
             tools_with_audio_datasets = Dataset.from_list([])
-
+        tools_with_audio_datasets = self.filter_dataset_features(tools_with_audio_datasets, "tools_with_audio_datasets")
+        
+        # [id, tools, images, audios, messages]
         print("Merging all datasets...")
         datasets_to_merge = []
         for dataset in [
             tulu_dataset, tulu_samples_with_tools, tulu_with_system,
             glaive_function_calling_dataset, glaive_function_calling_dataset_longer,
             xlam_dataset,
-            llave_onevision_dataset, llava_samples_with_tools, llava_with_system,
+            llava_onevision_dataset, llava_samples_with_tools, llava_with_system,
             voice_dataset, voice_samples_with_tools, voice_with_system,
             system_prompt_dataset, system_prompt_samples_with_tools,
             unitree_dataset, unitree_samples_with_tools,
@@ -831,10 +878,6 @@ class DataMixer:
         print(f"Saving to: {self.config.output_path}")
         self.save_llava_dataset(merged_dataset, self.config.output_path)
         print("Dataset processing completed!")
-        print(f"New datasets from test.py functionality:")
-        print(f"  - Unitree append tools: {len(unitree_dataset_append_tools)} samples")
-        print(f"  - Unitree random remove audio: {len(unitree_dataset_randomremoveaudio)} samples") 
-        print(f"  - Unitree toolcall mixed: {len(unitree_toolcall_mixed_dataset)} samples")
 
     def process_random_combine(self):
         """Process random combination of datasets"""
@@ -1141,11 +1184,18 @@ class DataMixer:
         glaive_tools = [data["tools"] for data in glaive_toolcall_dataset_filtered]
         
         # Mix tools into unitree toolcall dataset
+        glaive_select_parsed = json.loads(data["tools"]) # list
+        if isinstance(glaive_select_parsed, str):
+            glaive_select_parsed = [glaive_select_parsed]
         for i, data in enumerate(unitree_toolcall_dataset):
             n = random.randint(1, min(5, len(glaive_tools)))
             glaive_select = random.sample(glaive_tools, n)
             
-            glaive_select_parsed = [json.loads(_) for _ in glaive_select] + json.loads(data["tools"])
+            for gs in glaive_select:
+                gs = json.loads(gs)
+                if isinstance(gs, str):
+                    gs = [gs]
+                glaive_select_parsed += gs
             random.shuffle(glaive_select_parsed)
             data["tools"] = json.dumps(glaive_select_parsed, ensure_ascii=False)
         

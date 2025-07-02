@@ -223,7 +223,7 @@ class SharegptDatasetConverter(DatasetConverter):
         else:  # normal example
             prompt = aligned_messages[:-1]
             response = aligned_messages[-1:]
-        if example["id"] == "mask_history": # HACK: method for supervise last function call conversation turn (function_tag and assistant_tag)
+        if example["id"] == "unitree_mask_history": # HACK: method for supervise last function call conversation turn (function_tag and assistant_tag)
             response.insert(0, aligned_messages[-3])
 
         output = {

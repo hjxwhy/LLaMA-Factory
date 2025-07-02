@@ -217,19 +217,19 @@ class ConfigManager:
             "llama_factory_root": llama_factory_root,
             
             # Input dataset paths - construct from base paths
-            "tulu_path": f"{data_root}/tulu-3-sft-olmo-2-mixture-0225",
+            "tulu_path": f"{llama_factory_root}/tulu-3-sft-olmo-2-mixture-0225",
             "glaive_func_path": f"{llama_factory_root}/data/data/glaive_toolcall/glaive_toolcall_conversation_v2_noised.json",
-            "xlam_path": f"{data_root}/xlam-function-calling-60k/xlam_function_calling_60k.json",
+            "xlam_path": f"{llama_factory_root}/xlam-function-calling-60k/xlam_function_calling_60k.json",
             "llava_onevision_path": f"{llama_factory_root}/data/data/llava-onevision-data",
             "voice_assistant_path": f"{llama_factory_root}/data/data/VoiceAssistant-400K-Parsed/voiceassistant.jsonl",
-            "system_prompt_path": f"{data_root}/System-Prompt-Instruction-Real-world-Implementation-Training-set",
+            "system_prompt_path": f"{llama_factory_root}/System-Prompt-Instruction-Real-world-Implementation-Training-set",
             "aug_dataset_path": f"{llama_factory_root}/data/data/complex_system_prompts/all_aug_system_prompt.json",
             
             # Unitree specific paths
             "unitree_audio_user_path": f"{llama_factory_root}/data/data/unitree_train/common_prompts/audio_user",
             "unitree_g1_instruct_path": f"{llama_factory_root}/data/data/unitree_train/common_prompts/g1_instruct_data/conversation_v2.json",
-            "unitree_toolcall_path": f"{llama_factory_root}/data/data/glaive_toolcall/uniree_toolcall_conversation_v2.json",
-            "unitree_toolcall_mix_path": f"{llama_factory_root}/data/data/glaive_toolcall/toolcall_mix",
+            "unitree_toolcall_path": f"{llama_factory_root}/data/data/glaive_toolcall/unitree_toolcall_conversation_v2.json",
+            "unitree_toolcall_mix_path": f"{llama_factory_root}/data/data/glaive_toolcall/unitree_functioncall_mix_conversation.json",
             "unitree_mask_history_path": f"{llama_factory_root}/data/data/glaive_toolcall/unitree_mask_history.json",
             "unitree_fight_qa_path": f"{llama_factory_root}/data/data/unitree_train/fight_qa/combined_conversations.json",
             
