@@ -85,6 +85,7 @@ class DataMixConfig:
     # Qwen VL mix specific paths
     sharerobot_path: str
     pixmo_points_path: str
+    pixmo_ask_anything_path: str
     robospatial_data_dir: str
     robospatial_det_path: str
     
@@ -217,9 +218,9 @@ class ConfigManager:
             "llama_factory_root": llama_factory_root,
             
             # Input dataset paths - construct from base paths
-            "tulu_path": f"{llama_factory_root}/tulu-3-sft-olmo-2-mixture-0225",
+            "tulu_path": f"{llama_factory_root}/data/data/tulu-3-sft-olmo-2-mixture-0225",
             "glaive_func_path": f"{llama_factory_root}/data/data/glaive_toolcall/glaive_toolcall_conversation_v2_noised.json",
-            "xlam_path": f"{llama_factory_root}/xlam-function-calling-60k/xlam_function_calling_60k.json",
+            "xlam_path": f"{llama_factory_root}/data/data/xlam-function-calling-60k/xlam_function_calling_60k.json",
             "llava_onevision_path": f"{llama_factory_root}/data/data/llava-onevision-data",
             "voice_assistant_path": f"{llama_factory_root}/data/data/VoiceAssistant-400K-Parsed/voiceassistant.jsonl",
             "system_prompt_path": f"{llama_factory_root}/System-Prompt-Instruction-Real-world-Implementation-Training-set",
@@ -244,6 +245,7 @@ class ConfigManager:
             # Qwen VL mix specific paths
             "sharerobot_path": f"{llama_factory_root}/data/data/ShareRobot/sharerobot_mixed.jsonl",
             "pixmo_points_path": f"{llama_factory_root}/data/data/pixmo-points/pixmo-points-llama-factory.jsonl",
+            "pixmo_ask_anything_path": f"{llama_factory_root}/data/data/pixmo-ask-model-anything-parse/pixmo-ask-model-anything-llama-factory.json",
             "robospatial_data_dir": f"{llama_factory_root}/data/data/EmbodiedScan/robospatial",
             "robospatial_det_path": f"{llama_factory_root}/data/data/EmbodiedScan/robospatial/train_data_chunk_0_obj_det.json",
             

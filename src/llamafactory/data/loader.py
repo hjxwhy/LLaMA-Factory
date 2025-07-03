@@ -142,7 +142,7 @@ def _load_single_dataset(
             streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
         # data_args.streaming = True
-        if data_args.streaming and dataset_attr.load_from in ["file", "hf_hub"]:
+        if data_args.streaming and dataset_attr.load_from in ["file"]:
             dataset = dataset.shuffle()
             dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
 

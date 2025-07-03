@@ -13,8 +13,8 @@ import gc
 from copy import deepcopy
 
 # Add the common directory to the path to import config
-# sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
-from ..common.config import ConfigManager, DataMixConfig
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from common.config import ConfigManager, DataMixConfig
 
 try:
     from PIL import Image
@@ -65,7 +65,7 @@ class DataMixer:
                 data = json.load(f)
                 
             if len(data[0]["messages"]) < 2 or len(data[0]["messages"]) % 2 != 1:
-                print(f"skip {file} because of length {len(data[0]['messages'])}")
+                # print(f"skip {file} because of length {len(data[0]['messages'])}")
                 continue
                 
             for i in range(len(data[0]["audios"])):
@@ -177,7 +177,7 @@ class DataMixer:
             data = json.load(f)
         
         # Process messages to convert content lists to strings for specific files
-        if "uniree_toolcall_conversation_v2" in file_path:
+        if "unitree_toolcall_conversation_v2" in file_path:
             for item in data:
                 if "messages" in item and item["messages"] is not None:
                     for message in item["messages"]:
@@ -263,11 +263,8 @@ class DataMixer:
             self.logger.warning(f"Voice assistant path not found: {self.config.voice_assistant_path}")
             return Dataset.from_list([])
             
-        with open(self.config.voice_assistant_path, "r") as f:
-            # This file is jsonl, not json.
-            lines = f.readlines()
-            data = [json.loads(line) for line in lines]
-        return Dataset.from_list(data)
+        voice_dataset = load_dataset("json", data_files=self.config.voice_assistant_path)["train"]
+        return voice_dataset
 
     def combine_conversations(self, original_conversation, voice_assistant_conversations):
         """Combine original conversation with voice assistant conversations"""
@@ -722,6 +719,7 @@ class DataMixer:
             if total_items > selection_size:
                 random_indices = random.sample(range(total_items), selection_size)
                 llava_onevision_dataset = llava_onevision_dataset.select(random_indices)
+                llava_onevision_dataset = llava_onevision_dataset.map(lambda x: {"messages": [{"content": message["content"], "role": "assistant" if message["role"] == "Answer" else message["role"]} for message in x["messages"]]})
             else:
                 print(f"Note: llava_onevision_dataset contains only {total_items} items, which is less than {selection_size}")
         else:
@@ -751,6 +749,8 @@ class DataMixer:
             voice_samples_with_tools = Dataset.from_list([])
         voice_dataset = self.filter_dataset_features(voice_dataset, "voice_dataset")
         voice_samples_with_tools = self.filter_dataset_features(voice_samples_with_tools, "voice_samples_with_tools")
+
+        gc.collect()
 
         print("Loading system prompt dataset...")
         if os.path.exists(self.config.system_prompt_path):
@@ -798,6 +798,7 @@ class DataMixer:
             lambda example: self.add_system_prompt(example, system_prompts)
         )
         voice_with_system = self.filter_dataset_features(voice_with_system, "voice_with_system")
+        gc.collect()
 
         print("Loading augmented dataset...")
         if os.path.exists(self.config.aug_dataset_path):
@@ -833,6 +834,7 @@ class DataMixer:
             lambda example: self.add_system_prompt(example, aug_messages)
         )
         voice_dataset_with_aug = self.filter_dataset_features(voice_dataset_with_aug, "voice_dataset_with_aug")
+        gc.collect()
 
         print("Loading tools with audio datasets...")
         tools_with_audio_path = [
@@ -848,6 +850,15 @@ class DataMixer:
         else:
             tools_with_audio_datasets = Dataset.from_list([])
         tools_with_audio_datasets = self.filter_dataset_features(tools_with_audio_datasets, "tools_with_audio_datasets")
+
+        print("Processing random combine dataset...")
+        random_combine_dataset = self.process_random_combine()
+        random_combine_dataset = self.filter_dataset_features(random_combine_dataset, "random_combine_dataset")
+        gc.collect()
+
+        print("Creating pixmo ask anything dataset...")
+        pixmo_ask_anything_dataset = self.create_pixmo_ask_anything()
+        pixmo_ask_anything_dataset = self.filter_dataset_features(pixmo_ask_anything_dataset, "pixmo_ask_anything_dataset")
         
         # [id, tools, images, audios, messages]
         print("Merging all datasets...")
@@ -864,7 +875,9 @@ class DataMixer:
             llave_onevision_dataset_with_aug, voice_dataset_with_aug,
             tools_with_audio_datasets,
             unitree_toolcall_dataset,
-            merged_new_dataset
+            merged_new_dataset,
+            random_combine_dataset,
+            pixmo_ask_anything_dataset,
         ]:
             if len(dataset) > 0:
                 datasets_to_merge.append(dataset)
@@ -881,7 +894,7 @@ class DataMixer:
 
     def process_random_combine(self):
         """Process random combination of datasets"""
-        self.set_seed()
+        
         
         print("Loading datasets for random combination...")
         unitree_dataset = self.load_unitree_dataset()
@@ -912,7 +925,7 @@ class DataMixer:
             combined_data.append(combined_conversation)
         
         # Save the combined dataset
-        combined_data = combined_data + selected_unitree + selected_fight_qa
+        combined_data = combined_data + fight_qa_data
         
         # Add required fields
         for i in range(len(combined_data)):
@@ -936,9 +949,10 @@ class DataMixer:
         else:
             combined_dataset = Dataset.from_list(combined_data)
         
-        output_path = self.config.output_path.replace("_v2_1", "_random_combine")
-        self.save_llava_dataset(combined_dataset, output_path)
-        print(f"Random combine processing completed! Saved to: {output_path}")
+        # output_path = self.config.output_path.replace("_v2_1", "_random_combine")
+        # self.save_llava_dataset(combined_dataset, output_path)
+        # print(f"Random combine processing completed! Saved to: {output_path}")
+        return combined_dataset
 
     def process_qwen_vl_mix(self):
         """Process Qwen VL mixing"""
@@ -1082,7 +1096,7 @@ class DataMixer:
                     processed_messages = []
                     for msg in call_pairs:
                         processed_messages.append({
-                            "content": msg["value"],
+                            "content": msg["value"].replace("<audio>", ""),
                             "role": key_map[msg["from"]]
                         })
                     glaive_all_call_pairs.append({"messages": processed_messages, "tools": data["tools"]})
@@ -1184,9 +1198,10 @@ class DataMixer:
         glaive_tools = [data["tools"] for data in glaive_toolcall_dataset_filtered]
         
         # Mix tools into unitree toolcall dataset
-        glaive_select_parsed = json.loads(data["tools"]) # list
-        if isinstance(glaive_select_parsed, str):
-            glaive_select_parsed = [glaive_select_parsed]
+        data = unitree_toolcall_dataset[0]
+        unitree_tools = json.loads(data["tools"]) # list
+        if isinstance(unitree_tools, str):
+            unitree_tools = [unitree_tools]
         for i, data in enumerate(unitree_toolcall_dataset):
             n = random.randint(1, min(5, len(glaive_tools)))
             glaive_select = random.sample(glaive_tools, n)
@@ -1195,12 +1210,62 @@ class DataMixer:
                 gs = json.loads(gs)
                 if isinstance(gs, str):
                     gs = [gs]
-                glaive_select_parsed += gs
-            random.shuffle(glaive_select_parsed)
-            data["tools"] = json.dumps(glaive_select_parsed, ensure_ascii=False)
+                unitree_tools += gs
+            random.shuffle(unitree_tools)
+            data["tools"] = json.dumps(unitree_tools, ensure_ascii=False)
         
         return Dataset.from_list(unitree_toolcall_dataset)
 
+    def create_pixmo_ask_anything(self):
+        pixmo_ask_anything_dataset_en = self.load_json_dataset(self.config.pixmo_ask_anything_path)
+        pixmo_ask_anything_dataset_cn = self.load_json_dataset(self.config.pixmo_ask_anything_path.replace(".json", "-cn.json"))
+
+        # 中文的前 1/2有音频，
+        pixmo_ask_anything_dataset_cn = pixmo_ask_anything_dataset_cn.select(range(len(pixmo_ask_anything_dataset_cn)//4, len(pixmo_ask_anything_dataset_cn)//2))
+        # 英文的后 1/2有音频
+        pixmo_ask_anything_dataset_en = pixmo_ask_anything_dataset_en.select(range(0, len(pixmo_ask_anything_dataset_en)//4))
+
+        # load with audio
+        pixmo_ask_anything_dataset_cn_with_audio = self.load_json_dataset(self.config.pixmo_ask_anything_path.replace(".json", "-cn_v2.json"))
+        base = "pixmo-ask-model-anything/pixmo-ask-model-anything-llama-factory-cn-v2"
+        replace = "pixmo-ask-model-anything-parse/audios/pixmo-ask-model-anything-llama-factory-cn-v2_noised"
+        pixmo_ask_anything_dataset_cn_with_audio = \
+            pixmo_ask_anything_dataset_cn_with_audio.map(lambda x: {"audios": [audio.replace(base, replace) for audio in x["audios"]]})
+
+        pixmo_ask_anything_dataset_en_with_audio = self.load_json_dataset(self.config.pixmo_ask_anything_path.replace(".json", "_v2.json"))
+        base = "pixmo-ask-model-anything/pixmo-ask-model-anything-llama-factory-v2"
+        replace = "pixmo-ask-model-anything-parse/audios/pixmo-ask-model-anything-llama-factory-v2_noised"
+        pixmo_ask_anything_dataset_en_with_audio = \
+            pixmo_ask_anything_dataset_en_with_audio.map(lambda x: {"audios": [audio.replace(base, replace) for audio in x["audios"]]})
+        
+        print("Loading augmented dataset...")
+        if os.path.exists(self.config.aug_dataset_path):
+            with open(self.config.aug_dataset_path, "r") as f:
+                aug_dataset = json.load(f)
+            aug_messages = []
+            for example in aug_dataset:
+                aug_messages.append({"content": example, "role": "system"})
+        else:
+            aug_messages = []
+            print("No augmented dataset found")
+
+
+        pixmo_ask_anything_dataset = concatenate_datasets([pixmo_ask_anything_dataset_cn,
+                                                           pixmo_ask_anything_dataset_cn_with_audio,
+                                                           pixmo_ask_anything_dataset_en,
+                                                           pixmo_ask_anything_dataset_en_with_audio])
+
+        # sample 500 from pixmo_ask_anything_dataset
+        pixmo_ask_anything_dataset_sub = pixmo_ask_anything_dataset.shuffle(seed=42).select(range(500)).to_list()
+
+        # append aug_messages
+        for i, data in enumerate(pixmo_ask_anything_dataset_sub):
+            data["messages"].insert(0, aug_messages[i%len(aug_messages)])
+        pixmo_ask_anything_dataset_sub = Dataset.from_list(pixmo_ask_anything_dataset_sub)
+
+        pixmo_ask_anything_dataset = concatenate_datasets([pixmo_ask_anything_dataset_sub, pixmo_ask_anything_dataset])
+
+        return pixmo_ask_anything_dataset
 
 def main():
     parser = argparse.ArgumentParser(description='Process and mix multiple datasets')
@@ -1243,6 +1308,10 @@ def main():
     
     # Initialize and run data mixer
     mixer = DataMixer(config)
+    mixer.set_seed()
+
+    # mixer.create_pixmo_ask_anything()
+    # exit()
     
     if args.mode == 'full':
         mixer.process_all_datasets()

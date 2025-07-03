@@ -55,6 +55,8 @@ class DatasetConverter:
             if isinstance(medias[0], str):
                 for i in range(len(medias)):
                     media_path = os.path.join(self.data_args.media_dir, medias[i])
+                    if "uniree" in media_path:
+                        media_path = media_path.replace("uniree", "unitree")
                     if os.path.isfile(media_path):
                         medias[i] = media_path
                     else:
@@ -172,10 +174,15 @@ class SharegptDatasetConverter(DatasetConverter):
             if self.dataset_attr.images and message[self.dataset_attr.role_tag] == "user" and example[self.dataset_attr.images] is not None:
                 if "<image>" not in message[self.dataset_attr.content_tag] and len(example[self.dataset_attr.images]) > 0 and turn_idx < 2:
                     message[self.dataset_attr.content_tag] = "<image>" + message[self.dataset_attr.content_tag]
+            
+            content = message[self.dataset_attr.content_tag] if not_audio_user_only else "<audio>"
+            if self.dataset_attr.images and message[self.dataset_attr.role_tag] == "user" and example[self.dataset_attr.images] is not None:
+                if "<image>" not in content and len(example[self.dataset_attr.images]) > 0 and turn_idx < 2:
+                    content = "<image>" + content
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[self.dataset_attr.role_tag]],
-                    "content": message[self.dataset_attr.content_tag] if not_audio_user_only else "<audio>",
+                    "content": content,
                 }
             )
 
