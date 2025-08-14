@@ -126,6 +126,7 @@ class QuantizationMethod(str, Enum):
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
+    MXFP4 = "mxfp4"
 
 
 class RopeScaling(str, Enum):
@@ -143,7 +144,7 @@ def register_model_group(
     for name, path in models.items():
         SUPPORTED_MODELS[name] = path
         if template is not None and (
-            any(suffix in name for suffix in ("-Chat", "-Distill", "-Instruct")) or multimodal
+            any(suffix in name for suffix in ("-Chat", "-Distill", "-Instruct", "-Thinking")) or multimodal
         ):
             DEFAULT_TEMPLATE[name] = template
 
@@ -276,7 +277,7 @@ register_model_group(
 register_model_group(
     models={
         "ChatGLM2-6B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/chatglm2-6b",
+            DownloadSource.DEFAULT: "zai-org/chatglm2-6b",
             DownloadSource.MODELSCOPE: "ZhipuAI/chatglm2-6b",
         }
     },
@@ -287,11 +288,11 @@ register_model_group(
 register_model_group(
     models={
         "ChatGLM3-6B-Base": {
-            DownloadSource.DEFAULT: "THUDM/chatglm3-6b-base",
+            DownloadSource.DEFAULT: "zai-org/chatglm3-6b-base",
             DownloadSource.MODELSCOPE: "ZhipuAI/chatglm3-6b-base",
         },
         "ChatGLM3-6B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/chatglm3-6b",
+            DownloadSource.DEFAULT: "zai-org/chatglm3-6b",
             DownloadSource.MODELSCOPE: "ZhipuAI/chatglm3-6b",
         },
     },
@@ -333,7 +334,7 @@ register_model_group(
 register_model_group(
     models={
         "CodeGeeX4-9B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/codegeex4-all-9b",
+            DownloadSource.DEFAULT: "zai-org/codegeex4-all-9b",
             DownloadSource.MODELSCOPE: "ZhipuAI/codegeex4-all-9b",
         },
     },
@@ -591,6 +592,17 @@ register_model_group(
 
 register_model_group(
     models={
+        "Devstral-Small-2507-Instruct": {
+            DownloadSource.DEFAULT: "mistralai/Devstral-Small-2507",
+            DownloadSource.MODELSCOPE: "mistralai/Devstral-Small-2507",
+        },
+    },
+    template="mistral_small",
+)
+
+
+register_model_group(
+    models={
         "EXAONE-3.0-7.8B-Instruct": {
             DownloadSource.DEFAULT: "LGAI-EXAONE/EXAONE-3.0-7.8B-Instruct",
         },
@@ -712,6 +724,13 @@ register_model_group(
         "Gemma-1.1-7B-Instruct": {
             DownloadSource.DEFAULT: "google/gemma-1.1-7b-it",
         },
+    },
+    template="gemma",
+)
+
+
+register_model_group(
+    models={
         "Gemma-2-2B": {
             DownloadSource.DEFAULT: "google/gemma-2-2b",
             DownloadSource.MODELSCOPE: "LLM-Research/gemma-2-2b",
@@ -751,7 +770,7 @@ register_model_group(
             DownloadSource.MODELSCOPE: "google/medgemma-27b-text-it",
         },
     },
-    template="gemma",
+    template="gemma2",
 )
 
 
@@ -797,29 +816,53 @@ register_model_group(
 
 register_model_group(
     models={
+        "Gemma-3n-E2B": {
+            DownloadSource.DEFAULT: "google/gemma-3n-E2B",
+            DownloadSource.MODELSCOPE: "LLM-Research/gemma-3n-E2B",
+        },
+        "Gemma-3n-E4B": {
+            DownloadSource.DEFAULT: "google/gemma-3n-E4B",
+            DownloadSource.MODELSCOPE: "LLM-Research/gemma-3n-E4B",
+        },
+        "Gemma-3n-E2B-Instruct": {
+            DownloadSource.DEFAULT: "google/gemma-3n-E2B-it",
+            DownloadSource.MODELSCOPE: "LLM-Research/gemma-3n-E2B-it",
+        },
+        "Gemma-3n-E4B-Instruct": {
+            DownloadSource.DEFAULT: "google/gemma-3n-E4B-it",
+            DownloadSource.MODELSCOPE: "LLM-Research/gemma-3n-E4B-it",
+        },
+    },
+    template="gemma3n",
+    multimodal=True,
+)
+
+
+register_model_group(
+    models={
         "GLM-4-9B": {
-            DownloadSource.DEFAULT: "THUDM/glm-4-9b",
+            DownloadSource.DEFAULT: "zai-org/glm-4-9b",
             DownloadSource.MODELSCOPE: "ZhipuAI/glm-4-9b",
         },
         "GLM-4-9B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/glm-4-9b-chat",
+            DownloadSource.DEFAULT: "zai-org/glm-4-9b-chat",
             DownloadSource.MODELSCOPE: "ZhipuAI/glm-4-9b-chat",
             DownloadSource.OPENMIND: "LlamaFactory/glm-4-9b-chat",
         },
         "GLM-4-9B-1M-Chat": {
-            DownloadSource.DEFAULT: "THUDM/glm-4-9b-chat-1m",
+            DownloadSource.DEFAULT: "zai-org/glm-4-9b-chat-1m",
             DownloadSource.MODELSCOPE: "ZhipuAI/glm-4-9b-chat-1m",
         },
         "GLM-4-0414-9B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/GLM-4-9B-0414",
+            DownloadSource.DEFAULT: "zai-org/GLM-4-9B-0414",
             DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4-9B-0414",
         },
         "GLM-4-0414-32B-Base": {
-            DownloadSource.DEFAULT: "THUDM/GLM-4-32B-Base-0414",
+            DownloadSource.DEFAULT: "zai-org/GLM-4-32B-Base-0414",
             DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4-32B-Base-0414",
         },
         "GLM-4-0414-32B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/GLM-4-32B-0414",
+            DownloadSource.DEFAULT: "zai-org/GLM-4-32B-0414",
             DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4-32B-0414",
         },
     },
@@ -829,12 +872,63 @@ register_model_group(
 
 register_model_group(
     models={
+        "GLM-4.1V-9B-Base": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.1V-9B-Base",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.1V-9B-Base",
+        },
+        "GLM-4.1V-9B-Thinking": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.1V-9B-Thinking",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.1V-9B-Thinking",
+        },
+    },
+    template="glm4v",
+    multimodal=True,
+)
+
+
+register_model_group(
+    models={
+        "GLM-4.5-Air-Base": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.5-Air-Base",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.5-Air-Base",
+        },
+        "GLM-4.5-Base": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.5-Base",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.5-Base",
+        },
+        "GLM-4.5-Air-Thinking": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.5-Air",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.5-Air",
+        },
+        "GLM-4.5-Thinking": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.5",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.5",
+        },
+    },
+    template="glm4_moe",
+)
+
+
+register_model_group(
+    models={
+        "GLM-4.5V-Air-Thinking": {
+            DownloadSource.DEFAULT: "zai-org/GLM-4.5V",
+            DownloadSource.MODELSCOPE: "ZhipuAI/GLM-4.5V",
+        }
+    },
+    template="glm4v_moe",
+    multimodal=True,
+)
+
+
+register_model_group(
+    models={
         "GLM-Z1-0414-9B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/GLM-Z1-9B-0414",
+            DownloadSource.DEFAULT: "zai-org/GLM-Z1-9B-0414",
             DownloadSource.MODELSCOPE: "ZhipuAI/GLM-Z1-9B-0414",
         },
         "GLM-Z1-0414-32B-Chat": {
-            DownloadSource.DEFAULT: "THUDM/GLM-Z1-32B-0414",
+            DownloadSource.DEFAULT: "zai-org/GLM-Z1-32B-0414",
             DownloadSource.MODELSCOPE: "ZhipuAI/GLM-Z1-32B-0414",
         },
     },
@@ -861,6 +955,21 @@ register_model_group(
             DownloadSource.MODELSCOPE: "goodbai95/GPT2-xl",
         },
     },
+)
+
+
+register_model_group(
+    models={
+        "GPT-OSS-20B-Thinking": {
+            DownloadSource.DEFAULT: "openai/gpt-oss-20b",
+            DownloadSource.MODELSCOPE: "openai/gpt-oss-20b",
+        },
+        "GPT-OSS-120B-Thinking": {
+            DownloadSource.DEFAULT: "openai/gpt-oss-120b",
+            DownloadSource.MODELSCOPE: "openai/gpt-oss-120b",
+        },
+    },
+    template="gpt",
 )
 
 
@@ -968,6 +1077,17 @@ register_model_group(
     },
     template="granite3_vision",
     multimodal=True,
+)
+
+
+register_model_group(
+    models={
+        "Granite-4.0-tiny-preview": {
+            DownloadSource.DEFAULT: "ibm-granite/granite-4.0-tiny-preview",
+            DownloadSource.MODELSCOPE: "ibm-granite/granite-4.0-tiny-preview",
+        },
+    },
+    template="granite4",
 )
 
 
@@ -1140,6 +1260,18 @@ register_model_group(
             DownloadSource.MODELSCOPE: "AI-ModelScope/Jamba-v0.1",
         }
     },
+)
+
+
+register_model_group(
+    models={
+        "Keye-VL-8B-Chat": {
+            DownloadSource.DEFAULT: "Kwai-Keye/Keye-VL-8B-Preview",
+            DownloadSource.MODELSCOPE: "Kwai-Keye/Keye-VL-8B-Preview",
+        },
+    },
+    template="keye_vl",
+    multimodal=True,
 )
 
 
@@ -1604,6 +1736,18 @@ register_model_group(
         "MiniCPM-V-2_6": {
             DownloadSource.DEFAULT: "openbmb/MiniCPM-V-2_6",
             DownloadSource.MODELSCOPE: "OpenBMB/MiniCPM-V-2_6",
+        },
+    },
+    template="minicpm_v",
+    multimodal=True,
+)
+
+
+register_model_group(
+    models={
+        "MiniCPM-V-4": {
+            DownloadSource.DEFAULT: "openbmb/MiniCPM-V-4",
+            DownloadSource.MODELSCOPE: "OpenBMB/MiniCPM-V-4",
         },
     },
     template="minicpm_v",
@@ -2611,72 +2755,103 @@ register_model_group(
             DownloadSource.DEFAULT: "Qwen/Qwen3-30B-A3B-Base",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-30B-A3B-Base",
         },
-        "Qwen3-0.6B-Instruct": {
+        "Qwen3-0.6B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-0.6B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-0.6B",
         },
-        "Qwen3-1.7B-Instruct": {
+        "Qwen3-1.7B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-1.7B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-1.7B",
         },
-        "Qwen3-4B-Instruct": {
+        "Qwen3-4B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-4B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-4B",
         },
-        "Qwen3-8B-Instruct": {
+        "Qwen3-4B-Thinking-2507": {
+            DownloadSource.DEFAULT: "Qwen/Qwen3-4B-Thinking-2507",
+            DownloadSource.MODELSCOPE: "Qwen/Qwen3-4B-Thinking-2507",
+        },
+        "Qwen3-8B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-8B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-8B",
         },
-        "Qwen3-14B-Instruct": {
+        "Qwen3-14B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-14B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-14B",
         },
-        "Qwen3-32B-Instruct": {
+        "Qwen3-32B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-32B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-32B",
         },
-        "Qwen3-30B-A3B-Instruct": {
+        "Qwen3-30B-A3B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-30B-A3B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-30B-A3B",
         },
-        "Qwen3-235B-A22B-Instruct": {
+        "Qwen3-30B-A3B-Thinking-2507": {
+            DownloadSource.DEFAULT: "Qwen/Qwen3-30B-A3B-Thinking-2507",
+            DownloadSource.MODELSCOPE: "Qwen/Qwen3-30B-A3B-Thinking-2507",
+        },
+        "Qwen3-235B-A22B-Thinking": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-235B-A22B",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-235B-A22B",
         },
-        "Qwen3-0.6B-Instruct-GPTQ-Int8": {
+        "Qwen3-235B-A22B-Thinking-2507": {
+            DownloadSource.DEFAULT: "Qwen/Qwen3-235B-A22B-Thinking-2507",
+            DownloadSource.MODELSCOPE: "Qwen/Qwen3-235B-A22B-Thinking-2507",
+        },
+        "Qwen3-0.6B-Thinking-GPTQ-Int8": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-0.6B-GPTQ-Int8",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-0.6B-GPTQ-Int8",
         },
-        "Qwen3-1.7B-Instruct-GPTQ-Int8": {
+        "Qwen3-1.7B-Thinking-GPTQ-Int8": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-1.7B-GPTQ-Int8",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-1.7B-GPTQ-Int8",
         },
-        "Qwen3-4B-Instruct-AWQ": {
+        "Qwen3-4B-Thinking-AWQ": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-4B-AWQ",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-4B-AWQ",
         },
-        "Qwen3-8B-Instruct-AWQ": {
+        "Qwen3-8B-Thinking-AWQ": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-8B-AWQ",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-8B-AWQ",
         },
-        "Qwen3-14B-Instruct-AWQ": {
+        "Qwen3-14B-Thinking-AWQ": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-14B-AWQ",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-14B-AWQ",
         },
-        "Qwen3-32B-Instruct-AWQ": {
+        "Qwen3-32B-Thinking-AWQ": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-32B-AWQ",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-32B-AWQ",
         },
-        "Qwen3-30B-A3B-Instruct-GPTQ-Int4": {
+        "Qwen3-30B-A3B-Thinking-GPTQ-Int4": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-30B-A3B-GPTQ-Int4",
         },
-        "Qwen3-235B-A22B-Instruct-GPTQ-Int4": {
+        "Qwen3-235B-A22B-Thinking-GPTQ-Int4": {
             DownloadSource.DEFAULT: "Qwen/Qwen3-235B-A22B-GPTQ-Int4",
             DownloadSource.MODELSCOPE: "Qwen/Qwen3-235B-A22B-GPTQ-Int4",
         },
     },
     template="qwen3",
+)
+
+
+register_model_group(
+    models={
+        "Qwen3-4B-Instruct-2507": {
+            DownloadSource.DEFAULT: "Qwen/Qwen3-4B-Instruct-2507",
+            DownloadSource.MODELSCOPE: "Qwen/Qwen3-4B-Instruct-2507",
+        },
+        "Qwen3-30B-A3B-Instruct-2507": {
+            DownloadSource.DEFAULT: "Qwen/Qwen3-30B-A3B-Instruct-2507",
+            DownloadSource.MODELSCOPE: "Qwen/Qwen3-30B-A3B-Instruct-2507",
+        },
+        "Qwen3-235B-A22B-Instruct-2507": {
+            DownloadSource.DEFAULT: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            DownloadSource.MODELSCOPE: "Qwen/Qwen3-235B-A22B-Instruct-2507",
+        },
+    },
+    template="qwen3_nothink",
 )
 
 
