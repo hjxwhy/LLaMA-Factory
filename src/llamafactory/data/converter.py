@@ -55,7 +55,17 @@ class DatasetConverter:
             if isinstance(medias[0], str):
                 for i in range(len(medias)):
                     media_path = os.path.join(self.data_args.media_dir, medias[i])
-                    if os.path.isfile(media_path):
+                    if "uniree" in media_path:
+                        media_path = media_path.replace("uniree", "unitree")
+                    if "open-x" in media_path:
+                        data_names = ["berkeley_autolab_ur5", "bridge", "fractal20220817_data", "jaco_play"]
+                        if any(data_name in media_path for data_name in data_names):
+                            pass
+                        else:
+                            media_path = media_path.replace(".jpg", ".mp4")
+                    if not media_path.endswith(".mp4") and os.path.isfile(media_path):
+                        medias[i] = media_path
+                    elif media_path.endswith(".mp4"):
                         medias[i] = media_path
                     else:
                         logger.warning_rank0_once(
@@ -214,6 +224,8 @@ class SharegptDatasetConverter(DatasetConverter):
         else:  # normal example
             prompt = aligned_messages[:-1]
             response = aligned_messages[-1:]
+        if "id" in example and example["id"] == "unitree_mask_history": # HACK: method for supervise last function call conversation turn (function_tag and assistant_tag)
+            response.insert(0, aligned_messages[-3])
 
         output = {
             "_prompt": prompt,

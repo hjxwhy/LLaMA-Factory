@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, BinaryIO, Literal, Optional, TypedDict, Union
 
 import numpy as np
 import torch
+from decord import VideoReader
 from transformers.image_utils import get_image_size, is_valid_image, to_numpy_array
 from transformers.models.mllama.processing_mllama import (
     convert_sparse_cross_attention_mask_to_dense,
@@ -49,6 +50,8 @@ if is_librosa_available():
 if is_pillow_available():
     from PIL import Image
     from PIL.Image import Image as ImageObject
+    import warnings
+    warnings.filterwarnings("ignore", message="Palette images with Transparency expressed in bytes should be converted to RGBA images")
 
 
 if is_pyav_available():
@@ -248,6 +251,13 @@ class MMPluginMixin:
         r"""Regularize images to avoid error. Including reading and pre-processing."""
         results = []
         for image in images:
+            if isinstance(image, str) and "open-x" in image and "videos" in image:
+                video_path = os.path.join(os.path.dirname(image) + ".mp4")
+                image_id = int(os.path.basename(image).split(".")[0])
+                video_reader = VideoReader(video_path)
+                video_frames = video_reader.get_batch([image_id])
+                image = Image.fromarray(video_frames.asnumpy()[0])
+
             if isinstance(image, (str, BinaryIO)):
                 image = Image.open(image)
             elif isinstance(image, bytes):

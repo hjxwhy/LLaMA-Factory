@@ -15,6 +15,7 @@
 import os
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
+import json
 import numpy as np
 from datasets import Dataset, load_dataset, load_from_disk
 
@@ -128,6 +129,10 @@ def _load_single_dataset(
     elif dataset_attr.load_from == "cloud_file":
         dataset = Dataset.from_list(read_cloud_json(data_path), split=dataset_attr.split)
     else:
+        data_args.streaming = False
+        # with open(data_files[0]) as f:
+        #     data = json.load(f)
+        # dataset = Dataset.from_list(data)
         dataset = load_dataset(
             path=data_path,
             name=data_name,
@@ -140,7 +145,9 @@ def _load_single_dataset(
             trust_remote_code=model_args.trust_remote_code,
             streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
-        if data_args.streaming and dataset_attr.load_from == "file":
+        data_args.streaming = True
+        if data_args.streaming and dataset_attr.load_from in ["file", "hf_hub"]: # , "hf_hub"
+            dataset = dataset.shuffle()
             dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
 
     if dataset_attr.num_samples is not None and not data_args.streaming:

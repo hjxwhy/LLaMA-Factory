@@ -1,0 +1,54 @@
+{
+  "model_path": "/data1/saves/qwen2_5vl-7b/full/vlm_mix_robot_openx_training_50k/checkpoint-23000",
+  "output_dir": "output",
+  "tasks": [
+    {
+      "id": "task_infer_1",
+      "task": "task_infer",
+      "images": ["assets/demo/task_infer.png"],
+      "text": "Move the silver pot from in front of the red can, to next to the blue towel at the front edge of the table."
+    },
+    {
+      "id": "trajectory_1", 
+      "task": "trajectory",
+      "images": ["assets/demo/trajectory.jpg"],
+      "text": "pick up the banana"
+    },
+    {
+      "id": "pointing_1",
+      "task": "pointing", 
+      "images": ["assets/demo/pointing.jpg"],
+      "text": "the blue cup"
+    },
+    {
+      "id": "grounding_1",
+      "task": "grounding",
+      "images": ["assets/demo/grounding.jpg"], 
+      "text": "banana"
+    },
+    {
+      "id": "affordance_1",
+      "task": "affordance",
+      "images": ["assets/demo/affordance.jpg"],
+      "text": "take up the cup"
+    },
+    {
+      "id": "spatial_reasoning_1", 
+      "task": "spatial_reasoning",
+      "images": ["assets/demo/pointing.jpg"],
+      "text": "the empty space between the cups close to right cup"
+    },
+    {
+      "id": "task_planning_1",
+      "task": "task_planning",
+      "images": ["assets/demo/task_infer.png"], 
+      "text": "Move the silver pot from in front of the red can, to next to the blue towel at the front edge of the table."
+    },
+    {
+      "id": "choices_1",
+      "task": "choices",
+      "images": ["assets/demo/1896_point35695_00950_00650_img1.jpg", "assets/demo/1896_point35695_00950_00650_img2.jpg"],
+      "text": ""
+    }
+  ]
+} 
