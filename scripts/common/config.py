@@ -88,6 +88,10 @@ class DataMixConfig:
     pixmo_ask_anything_path: str
     robospatial_data_dir: str
     robospatial_det_path: str
+    m4_instruct_path: str
+    llava_next_path: str
+    prism_path: str
+    mllm_spatial_path: str
     
     # Output path
     output_path: str
@@ -210,7 +214,7 @@ class ConfigManager:
 
         # Prioritize environment variables, then file config, then defaults
         data_root = os.getenv("DATA_ROOT", loaded_config.get("data_root", "/localfolder/data"))
-        llama_factory_root = os.getenv("LLAMA_FACTORY_ROOT", loaded_config.get("llama_factory_root", "/localfolder/code/LLaMA-Factory"))
+        llama_factory_root = os.getenv("LLAMA_FACTORY_ROOT", loaded_config.get("llama_factory_root", "/jfs/jensen/code/LLaMA-Factory"))
 
         # Base config with dynamically constructed paths
         base_config = {
@@ -221,7 +225,7 @@ class ConfigManager:
             "tulu_path": f"{llama_factory_root}/data/data/tulu-3-sft-olmo-2-mixture-0225",
             "glaive_func_path": f"{llama_factory_root}/data/data/glaive_toolcall/glaive_toolcall_conversation_v2_noised.json",
             "xlam_path": f"{llama_factory_root}/data/data/xlam-function-calling-60k/xlam_function_calling_60k.json",
-            "llava_onevision_path": f"{llama_factory_root}/data/data/llava-onevision-data",
+            "llava_onevision_path": f"{llama_factory_root}/data/data/LLaVA-OneVision-Data-Parsed/_DATA_disk0_data_LLaVA-OneVision-Data.json",
             "voice_assistant_path": f"{llama_factory_root}/data/data/VoiceAssistant-400K-Parsed/voiceassistant.jsonl",
             "system_prompt_path": f"{llama_factory_root}/System-Prompt-Instruction-Real-world-Implementation-Training-set",
             "aug_dataset_path": f"{llama_factory_root}/data/data/complex_system_prompts/all_aug_system_prompt.json",
@@ -248,7 +252,10 @@ class ConfigManager:
             "pixmo_ask_anything_path": f"{llama_factory_root}/data/data/pixmo-ask-model-anything-parse/pixmo-ask-model-anything-llama-factory.json",
             "robospatial_data_dir": f"{llama_factory_root}/data/data/EmbodiedScan/robospatial",
             "robospatial_det_path": f"{llama_factory_root}/data/data/EmbodiedScan/robospatial/train_data_chunk_0_obj_det.json",
-            
+            "m4_instruct_path": f"{llama_factory_root}/data/data/M4-Instruct-Data/m4_instruct_annotations.json",
+            "llava_next_path": f"{llama_factory_root}/data/data/LLaVA-NeXT-Data/llava_next_conversations.json",
+            "prism_path": f"{llama_factory_root}/data/data/PRISM/conversations_train.json",
+            "mllm_spatial_path": f"{llama_factory_root}/data/data/EmbodiedScan/mllm_spatial/mllm_spatial_v1_0.json",
             # Output path
             "output_path": f"{llama_factory_root}/data/data/mix_text_image_audio_tools_200w_unitreetools_v2_1"
         }

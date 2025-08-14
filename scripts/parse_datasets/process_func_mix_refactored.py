@@ -1,3 +1,4 @@
+from functools import partial
 import json
 import os
 import sys
@@ -105,6 +106,14 @@ class DataMixer:
         
         return Dataset.from_list(all_unitree_data)
 
+    def pad_prefix(self, example, prefix):
+        if "image" in example:
+            if isinstance(example["image"], list):
+                example["images"] = [os.path.join(prefix, image) for image in example["image"]]
+            else:
+                example["images"] = [os.path.join(prefix, example["image"])]
+        return example
+    
     def convert_conv2messages(self, example):
         """Convert conversation format to messages format"""
         messages = []
@@ -122,8 +131,8 @@ class DataMixer:
             if tools is not None and len(tools) < 1:
                 example["tools"] = None
                 
-        example["messages"] = messages
-        example["id"] = "glaive_toolcall"
+        example["messages"] = messages            
+        # example["id"] = "glaive_toolcall"
         return example
 
     def convert_xlam2messages(self, example):
@@ -953,6 +962,109 @@ class DataMixer:
         # self.save_llava_dataset(combined_dataset, output_path)
         # print(f"Random combine processing completed! Saved to: {output_path}")
         return combined_dataset
+    def load_tulu_dataset(self):
+        """Load Tulu dataset"""
+        if os.path.exists(self.config.tulu_path):
+            tulu_dataset = load_dataset(self.config.tulu_path)["train"]
+            tulu_dataset = tulu_dataset.filter(lambda x: "hard_coded" not in x["id"])
+            return tulu_dataset
+        else:
+            return Dataset.from_list([])
+    
+    def load_m4_instruct_dataset(self):
+        """Load M4 Instruct dataset"""
+        if os.path.exists(self.config.m4_instruct_path):
+            with open(self.config.m4_instruct_path, "r") as f:
+                data = json.load(f)
+                valid_keys = ["conversations", "image"]
+                for item in data:
+                    keys = list(item.keys())
+                    for k in keys:
+                        if k not in valid_keys:
+                            item.pop(k)
+                    item["id"] = "m4_instruct"
+            m4_instruct_dataset = Dataset.from_list(data)
+            m4_instruct_dataset = m4_instruct_dataset.filter(lambda x: len(x["image"]) > 0)
+            m4_instruct_dataset = m4_instruct_dataset.map(self.convert_conv2messages, remove_columns=["conversations"])
+            m4_instruct_dataset = m4_instruct_dataset.map(partial(self.pad_prefix, prefix="M4-Instruct-Data"), remove_columns=["image"])
+            m4_instruct_dataset = m4_instruct_dataset.filter(lambda x: "M4-Instruct-Data/mmchat/images" not in x["images"][0])
+            return m4_instruct_dataset
+        else:
+            return Dataset.from_list([])
+
+    def load_llava_next_dataset(self):
+        """Load LLaVA Next dataset"""
+        if os.path.exists(self.config.llava_next_path):
+            llava_next_dataset = load_dataset("json", data_files=self.config.llava_next_path)["train"]
+            llava_next_dataset = llava_next_dataset.map(self.convert_conv2messages, remove_columns=["conversations"])
+            llava_next_dataset = llava_next_dataset.rename_column("image", "images")
+            return llava_next_dataset
+        else:
+            return Dataset.from_list([])
+    
+    def load_mllm_spatial_dataset(self):
+        """Load MLLM Spatial dataset"""
+        import json
+        import re
+
+        def read_indented_jsonl(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # 找到每个JSON对象的边界
+            objects = []
+            brace_count = 0
+            current_obj = ""
+            
+            for char in content:
+                current_obj += char
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        # 完整的JSON对象
+                        try:
+                            obj = json.loads(current_obj.strip())
+                            objects.append(obj)
+                        except:
+                            pass
+                        current_obj = ""
+            
+            return objects
+
+        # 使用
+        if os.path.exists(self.config.mllm_spatial_path):
+            # mllm_spatial_dataset = load_dataset("json", data_files=self.config.mllm_spatial_path)["train"]
+            datas = []
+            with open(self.config.mllm_spatial_path, "r", encoding="utf-8") as f:
+                datas = read_indented_jsonl(self.config.mllm_spatial_path)
+            mllm_spatial_dataset = Dataset.from_list(datas)
+            return mllm_spatial_dataset
+        else:
+            return Dataset.from_list([])
+    def load_spatial_qa(self):
+        qa_pair = "/jfs/jensen/code/LLaMA-Factory/data/data/ShareRobot/spatial_qa/qa_pairs.json"
+        with open(qa_pair, "r", encoding="utf-8") as f:
+            datas = json.load(f)
+
+        question_type = {}
+        for data in datas:
+            if data["question_type"] not in question_type:
+                question_type[data["question_type"]] = [data]
+            else:
+                question_type[data["question_type"]].append(data)
+        
+        # Sample 20% from each question type
+        sampled_data = []
+        for qtype, data_list in question_type.items():
+            sample_size = max(1, int(len(data_list) * 0.3))  # At least 1 sample, 20% of each type
+            sampled = random.sample(data_list, sample_size)
+            for s in sampled:
+                s["images"] = [os.path.join("ShareRobot/spatial_qa/images", image) for image in s["images"]]
+            sampled_data.extend(sampled)
+        
+        return Dataset.from_list(sampled_data)
 
     def process_qwen_vl_mix(self):
         """Process Qwen VL mixing"""
@@ -973,10 +1085,14 @@ class DataMixer:
 
         # Load LLaVA OneVision dataset
         if os.path.exists(self.config.llava_onevision_path):
-            llava_onevision_dataset = load_dataset(self.config.llava_onevision_path)["train"]
-            llava_onevision_dataset = llava_onevision_dataset.filter(lambda x: len(x["images"]) > 0)
-            if "tools" in llava_onevision_dataset.column_names:
-                llava_onevision_dataset = llava_onevision_dataset.remove_columns(["tools"])
+            with open(self.config.llava_onevision_path, "r", encoding="utf-8") as f:
+                datas = json.load(f)
+            llava_onevision_dataset = Dataset.from_list(datas)
+            llava_onevision_dataset = llava_onevision_dataset.filter(lambda x: x["image"] is not None and len(x["image"]) > 0)
+            llava_onevision_dataset = llava_onevision_dataset.shuffle(seed=42).select(range(int(len(llava_onevision_dataset) * 0.5)))
+            llava_onevision_dataset = llava_onevision_dataset.map(self.convert_conv2messages, remove_columns=["conversations"])
+            llava_onevision_dataset = llava_onevision_dataset.map(partial(self.pad_prefix, prefix="LLaVA-OneVision-Data-Parsed"), remove_columns=["image"])
+            llava_onevision_dataset = self.filter_dataset_features(llava_onevision_dataset, "llava_onevision_dataset")
             print("LLaVA OneVision dataset loaded:", len(llava_onevision_dataset))
         else:
             llava_onevision_dataset = Dataset.from_list([])
@@ -1000,8 +1116,8 @@ class DataMixer:
             qa_files = [os.path.join(self.config.robospatial_data_dir, f) for f in os.listdir(self.config.robospatial_data_dir) if f.endswith(".json") and f.startswith("qa_")]
             if qa_files:
                 robospatial_dataset_v2 = load_dataset("json", data_files=qa_files)["train"]
-                robospatial_dataset_v2 = robospatial_dataset_v2.map(self.process_robospatial_v2, remove_columns=["image_path", "question", "answer"])
                 robospatial_dataset_v2 = robospatial_dataset_v2.shuffle(seed=42).select(range(int(len(robospatial_dataset_v2) * self.config.robospatial_subset_ratio)))
+                robospatial_dataset_v2 = robospatial_dataset_v2.map(self.process_robospatial_v2, remove_columns=["image_path", "question", "answer"])
                 print("RoboSpatial dataset v2 loaded:", len(robospatial_dataset_v2))
             else:
                 robospatial_dataset_v2 = Dataset.from_list([])
@@ -1013,13 +1129,44 @@ class DataMixer:
         # Load text dataset
         if os.path.exists(self.config.tulu_path):
             text_dataset = load_dataset(self.config.tulu_path)["train"]
-            text_dataset = text_dataset.shuffle(seed=42).select(range(int(len(text_dataset) * self.config.tulu_subset_ratio)))
+            text_dataset = text_dataset.filter(lambda x: "hard_coded" not in x["id"])
+            # text_dataset = text_dataset.shuffle(seed=42).select(range(int(len(text_dataset) * self.config.tulu_subset_ratio)))
         else:
             text_dataset = Dataset.from_list([])
 
+        m4_instruct_dataset = self.load_m4_instruct_dataset()
+        m4_instruct_dataset = self.filter_dataset_features(m4_instruct_dataset, "m4_instruct_dataset")
+        llava_next_dataset = self.load_llava_next_dataset()
+        llava_next_dataset = self.filter_dataset_features(llava_next_dataset, "llava_next_dataset")
+        pixmo_ask_anything_dataset = self.create_pixmo_ask_anything()
+        pixmo_ask_anything_dataset = self.filter_dataset_features(pixmo_ask_anything_dataset, "pixmo_ask_anything_dataset")
+
+        prism_dataset = load_dataset("json", data_files=self.config.prism_path)["train"]
+        prism_dataset = self.filter_dataset_features(prism_dataset, "prism_dataset")
+        gc.collect()
+        sharerobot_dataset = self.filter_dataset_features(sharerobot_dataset, "sharerobot_dataset")
+        llava_onevision_dataset = self.filter_dataset_features(llava_onevision_dataset, "llava_onevision_dataset")
+        robospatial_dataset = self.filter_dataset_features(robospatial_dataset, "robospatial_dataset")
+        robospatial_dataset_v2 = self.filter_dataset_features(robospatial_dataset_v2, "robospatial_dataset_v2")
+        pointing_dataset = self.filter_dataset_features(pointing_dataset, "pointing_dataset")
+        text_dataset = self.filter_dataset_features(text_dataset, "text_dataset")
+        gc.collect()
+
+        mllm_spatial_dataset = self.load_mllm_spatial_dataset()
+        mllm_spatial_dataset = self.filter_dataset_features(mllm_spatial_dataset, "mllm_spatial_dataset")
+
+        spatial_qa_dataset = self.load_spatial_qa()
+        spatial_qa_dataset = self.filter_dataset_features(spatial_qa_dataset, "spatial_qa_dataset")
+        spatial_qa_dataset = spatial_qa_dataset.repeat(2)
+    
+
+        
         # Merge datasets
         datasets_to_merge = []
-        for dataset in [sharerobot_dataset, llava_onevision_dataset, robospatial_dataset, robospatial_dataset_v2, pointing_dataset, text_dataset]:
+        for dataset in [sharerobot_dataset, llava_onevision_dataset, \
+                        robospatial_dataset, robospatial_dataset_v2, pointing_dataset, \
+                        text_dataset, m4_instruct_dataset, llava_next_dataset, pixmo_ask_anything_dataset,
+                        prism_dataset, mllm_spatial_dataset, spatial_qa_dataset]:
             if len(dataset) > 0:
                 datasets_to_merge.append(dataset)
         
@@ -1259,9 +1406,12 @@ class DataMixer:
         pixmo_ask_anything_dataset_sub = pixmo_ask_anything_dataset.shuffle(seed=42).select(range(500)).to_list()
 
         # append aug_messages
-        for i, data in enumerate(pixmo_ask_anything_dataset_sub):
-            data["messages"].insert(0, aug_messages[i%len(aug_messages)])
-        pixmo_ask_anything_dataset_sub = Dataset.from_list(pixmo_ask_anything_dataset_sub)
+        if len(aug_messages) > 0:
+            for i, data in enumerate(pixmo_ask_anything_dataset_sub):
+                data["messages"].insert(0, aug_messages[i%len(aug_messages)])
+            pixmo_ask_anything_dataset_sub = Dataset.from_list(pixmo_ask_anything_dataset_sub)
+        else:
+            pixmo_ask_anything_dataset_sub = Dataset.from_list([])
 
         pixmo_ask_anything_dataset = concatenate_datasets([pixmo_ask_anything_dataset_sub, pixmo_ask_anything_dataset])
 
@@ -1310,8 +1460,6 @@ def main():
     mixer = DataMixer(config)
     mixer.set_seed()
 
-    # mixer.create_pixmo_ask_anything()
-    # exit()
     
     if args.mode == 'full':
         mixer.process_all_datasets()

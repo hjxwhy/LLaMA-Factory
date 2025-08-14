@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from types import MethodType
 from typing import TYPE_CHECKING, Any
 
@@ -55,6 +56,9 @@ def patch_tokenizer(tokenizer: "PreTrainedTokenizer", model_args: "ModelArgument
         tokenizer.model_max_length = model_args.model_max_length  # enlarge the tokenizer max length
 
     if model_args.add_tokens is not None:
+        if isinstance(model_args.add_tokens[0], str) and os.path.exists(model_args.add_tokens[0]):
+            with open(model_args.add_tokens[0], "r") as f:
+                model_args.add_tokens = f.read().splitlines()
         num_added_tokens = tokenizer.add_tokens(new_tokens=model_args.add_tokens, special_tokens=False)
         logger.info_rank0("Add tokens {} to tokenizer's vocabulary.".format(",".join(model_args.add_tokens)))
         if num_added_tokens > 0 and not model_args.resize_vocab:

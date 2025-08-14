@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 import numpy as np
 
 # Model setup
-model_name = "/DATA/disk0/saves/qwen2_5vl-7b/full/sft_mix_llava_onevision_robospatial_pointing_1e-6_60k/checkpoint-34000"
+model_name = "/data1/saves/qwen2_5vl-7b/full/sft_mix_llava_onevision_robospatial_pointing_morewb_1e-6_100k/checkpoint-10000"
 # model_name = "/DATA/disk0/Qwen2.5-VL-7B-Instruct"
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_name, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="flash_attention_2")
 processor = AutoProcessor.from_pretrained(model_name)
