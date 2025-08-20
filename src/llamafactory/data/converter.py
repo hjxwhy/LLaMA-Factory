@@ -167,12 +167,31 @@ class SharegptDatasetConverter(DatasetConverter):
 
         aligned_messages = []
         broken_data = False
+        has_image_tag = any((message[self.dataset_attr.role_tag] == "user") and ("<image>" in message[self.dataset_attr.content_tag]) for message in messages)
         for turn_idx, message in enumerate(messages):
             if message[self.dataset_attr.role_tag] not in accept_tags[turn_idx % 2]:
                 logger.warning_rank0(f"Invalid role tag in {messages}.")
                 broken_data = True
                 break
+            
+            # qwen omni training, user message only using audio
+            not_audio_user_only = (message[self.dataset_attr.role_tag] not in odd_tags \
+                                                                          or "<audio>" not in message[self.dataset_attr.content_tag])
+            if self.dataset_attr.images and message[self.dataset_attr.role_tag] == "user" and example[self.dataset_attr.images] is not None and not has_image_tag:
+                if "<image>" not in message[self.dataset_attr.content_tag] and len(example[self.dataset_attr.images]) > 0 and turn_idx < 2:
+                    message[self.dataset_attr.content_tag] = "<image>" * len(example[self.dataset_attr.images]) + message[self.dataset_attr.content_tag]
+            
+            is_audio = False
+            if self.dataset_attr.images and message[self.dataset_attr.role_tag] == "user" and example[self.dataset_attr.images] is not None:
+                num_images = message[self.dataset_attr.content_tag].count("<image>")
+                is_audio = message[self.dataset_attr.content_tag].count("<audio>") > 0
 
+            content = message[self.dataset_attr.content_tag] if not_audio_user_only else "<audio>"
+            if is_audio and num_images > 0:
+                content = "<image>" * num_images + content
+            # if self.dataset_attr.images and message[self.dataset_attr.role_tag] == "user" and example[self.dataset_attr.images] is not None:
+            #     if "<image>" not in content and len(example[self.dataset_attr.images]) > 0 and turn_idx < 2:
+            #         content = "<image>" * len(example[self.dataset_attr.images]) + content
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[self.dataset_attr.role_tag]],

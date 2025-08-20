@@ -1,0 +1,69 @@
+### model
+model_name_or_path: /DATA/disk0/Qwen2.5-Omni-7B
+image_max_pixels: 262144
+video_max_pixels: 16384
+trust_remote_code: true
+use_fast_tokenizer: false
+
+### method
+stage: sft
+do_train: true
+finetuning_type: full
+# lora_rank: 16
+# lora_target: all
+# use_dora: true
+freeze_vision_tower: true  # choices: [true, false]
+freeze_multi_modal_projector: true  # choices: [true, false]
+freeze_language_model: false  # choices: [true, false]
+deepspeed: ./examples/deepspeed/ds_z2_config.json  # choices: [ds_z0_config.json, ds_z2_config.json, ds_z3_config.json]
+
+### dataset
+# dataset: unitree,unitree_g1_instruct,glaive_toolcall_en_demo_audio,glaive_toolcall_zh_demo_audio
+# dataset: unitree,unitree_g1_instruct,glaive_toolcall_en_demo_audio,glaive_toolcall_zh_demo_audio,glaive_toolcall_en_demo
+dataset: tulu-3-sft-olmo-2-mixture-0225
+dataset_dir: ./data
+media_dir: /home/unitree/unitree_conv_data/common_prompts/audio_user
+template: qwen2_omni
+cutoff_len: 16384
+# max_samples: 10
+overwrite_cache: true
+preprocessing_num_workers: 16
+dataloader_num_workers: 6
+mix_strategy: interleave_over
+streaming: true
+buffer_size: 128
+preprocessing_batch_size: 128
+
+### output
+output_dir: /DATA/disk0/saves/qwen2_omni-7b/full/sft_func_full_lr1e-6_mix_20k
+logging_steps: 10
+save_steps: 1000
+plot_loss: true
+overwrite_output_dir: true
+save_only_model: false
+report_to: tensorboard
+
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 4
+learning_rate: 1.0e-6
+num_train_epochs: 1.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+ddp_timeout: 180000000
+resume_from_checkpoint: null
+flash_attn: fa2
+gradient_checkpointing: true
+max_steps: 20000
+save_total_limit: 2
+# weight_decay: 0.01
+accelerator_config:
+  dispatch_batches: false
+
+### eval
+# val_size: 0.1
+# per_device_eval_batch_size: 1
+# eval_strategy: steps
+# eval_steps: 500

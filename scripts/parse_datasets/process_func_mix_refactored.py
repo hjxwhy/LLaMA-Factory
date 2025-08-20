@@ -1118,6 +1118,7 @@ class DataMixer:
                 robospatial_dataset_v2 = load_dataset("json", data_files=qa_files)["train"]
                 robospatial_dataset_v2 = robospatial_dataset_v2.shuffle(seed=42).select(range(int(len(robospatial_dataset_v2) * self.config.robospatial_subset_ratio)))
                 robospatial_dataset_v2 = robospatial_dataset_v2.map(self.process_robospatial_v2, remove_columns=["image_path", "question", "answer"])
+                robospatial_dataset_v2 = robospatial_dataset_v2.map(self.process_robospatial_v2, remove_columns=["image_path", "question", "answer"])
                 print("RoboSpatial dataset v2 loaded:", len(robospatial_dataset_v2))
             else:
                 robospatial_dataset_v2 = Dataset.from_list([])
@@ -1129,6 +1130,8 @@ class DataMixer:
         # Load text dataset
         if os.path.exists(self.config.tulu_path):
             text_dataset = load_dataset(self.config.tulu_path)["train"]
+            text_dataset = text_dataset.filter(lambda x: "hard_coded" not in x["id"])
+            # text_dataset = text_dataset.shuffle(seed=42).select(range(int(len(text_dataset) * self.config.tulu_subset_ratio)))
             text_dataset = text_dataset.filter(lambda x: "hard_coded" not in x["id"])
             # text_dataset = text_dataset.shuffle(seed=42).select(range(int(len(text_dataset) * self.config.tulu_subset_ratio)))
         else:

@@ -20,12 +20,25 @@
     "columns": {
       "messages": "messages",
       "images": "images"
+    }
+  },
+  "mix_all": {
+    "hf_hub_url": "data/data/unitree_train_long_conversations",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images",
+      "audios": "audios",
+      "tools": "tools"
     },
     "tags": {
       "role_tag": "role",
       "content_tag": "content",
       "user_tag": "user",
-      "assistant_tag": "assistant"
+      "assistant_tag": "assistant",
+      "system_tag":"system",
+      "function_tag":"function_call",
+      "observation_tag":"observation"
     }
   },
   "identity": {
