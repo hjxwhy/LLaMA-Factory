@@ -1,4 +1,18 @@
-{
+{ 
+  "trajectory_points":{
+    "file_name": "data/qwen-vl-2.5/train.json",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags":{
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt"
+    }
+  },
   "vlm_mix_robot_openx_training": {
     "hf_hub_url": "data/data/vlm_mix_robot_openx_training_v3",
     "formatting": "sharegpt",
