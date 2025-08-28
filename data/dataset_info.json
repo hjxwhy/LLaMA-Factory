@@ -1,4 +1,19 @@
 { 
+  "describe_anything": {
+    "webdataset": "/jfs/qwen_models/describe-anything-dataset",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant",
+      "system_tag":"system"
+    }
+  },
   "trajectory_points":{
     "file_name": "data/qwen-vl-2.5/train.json",
     "formatting": "sharegpt",

@@ -16,6 +16,14 @@ import json
 from enum import Enum, unique
 from typing import TYPE_CHECKING, Any, Optional, TypedDict, Union
 
+import glob
+import pickle
+from typing import Iterator, Dict, Any
+import numpy as np
+from PIL import Image
+from pycocotools import mask as maskUtils
+import random
+
 import fsspec
 from datasets import DatasetDict, concatenate_datasets, interleave_datasets
 
@@ -188,3 +196,235 @@ def read_cloud_json(cloud_path: str) -> list[Any]:
         raise ValueError(f"No JSON/JSONL files found in the specified path: {cloud_path}.")
 
     return sum([_read_json_with_fs(fs, file) for file in files], [])
+
+
+def decode_rle_mask(rle_data: Dict[str, Any]) -> np.ndarray:
+    """
+    Decode RLE (Run Length Encoding) mask data to a binary mask image using pycocotools.
+    
+    Args:
+        rle_data: Dictionary containing 'counts' and 'size' keys
+        
+    Returns:
+        Binary mask as numpy array
+    """
+    try:
+        # Use pycocotools to decode the RLE mask
+        mask = maskUtils.decode(rle_data)
+        return mask.astype(np.uint8)
+    except Exception as e:
+        print(f"Error decoding RLE mask with pycocotools: {e}")
+        # Fallback: create empty mask
+        size = rle_data.get('size', [640, 480])
+        return np.zeros((size[1], size[0]), dtype=np.uint8)
+
+
+def short_side_resize(img: Image.Image, image_size: int, mode: Image.Resampling = Image.Resampling.NEAREST):
+        w, h = img.size
+        if w < h:
+            new_w = image_size
+            new_h = int(h * image_size / w)
+        else:
+            new_h = image_size
+            new_w = int(w * image_size / h)
+        img = img.resize((new_w, new_h), resample=mode)
+        return img
+
+def crop_image_and_mask(img: Image.Image, mask: Image.Image, image_size: int):
+    # 需要根据mask来crop图片和mask, crop出来的mask有效区域（mask>0）需要大于50%，如果小于50%需要重新生成crop区域的边界
+    
+    img_w, img_h = img.size
+    mask_w, mask_h = mask.size
+    
+    # 将mask转换为numpy数组进行处理
+    mask_array = np.array(mask)
+    
+    # 找到mask的边界框
+    mask_indices = np.where(mask_array > 0)
+    if len(mask_indices[0]) == 0:
+        # 如果没有有效的mask区域，返回中心crop
+        crop_size = min(img_w, img_h, image_size)
+        left = (img_w - crop_size) // 2
+        top = (img_h - crop_size) // 2
+        right = left + crop_size
+        bottom = top + crop_size
+        
+        cropped_img = img.crop((left, top, right, bottom))
+        cropped_mask = mask.crop((left, top, right, bottom))
+        return cropped_img, cropped_mask
+    
+    min_y, max_y = mask_indices[0].min(), mask_indices[0].max()
+    min_x, max_x = mask_indices[1].min(), mask_indices[1].max()
+    
+    # 计算mask的中心点
+    center_y = (min_y + max_y) // 2
+    center_x = (min_x + max_x) // 2
+    
+    # 尝试生成合适的crop区域
+    max_attempts = 10
+    for attempt in range(max_attempts):
+        # 计算crop区域的边界
+        half_size = image_size // 2
+        
+        # 初始crop区域以mask中心为中心
+        if attempt == 0:
+            crop_left = max(0, center_x - half_size)
+            crop_top = max(0, center_y - half_size)
+        else:
+            # 后续尝试添加一些随机偏移
+            offset_x = random.randint(-half_size//2, half_size//2)
+            offset_y = random.randint(-half_size//2, half_size//2)
+            crop_left = max(0, min(img_w - image_size, center_x - half_size + offset_x))
+            crop_top = max(0, min(img_h - image_size, center_y - half_size + offset_y))
+        
+        crop_right = min(img_w, crop_left + image_size)
+        crop_bottom = min(img_h, crop_top + image_size)
+        
+        # 调整crop区域确保尺寸正确
+        if crop_right - crop_left < image_size:
+            crop_left = max(0, crop_right - image_size)
+        if crop_bottom - crop_top < image_size:
+            crop_top = max(0, crop_bottom - image_size)
+        
+        # 提取crop区域的mask
+        cropped_mask_array = mask_array[crop_top:crop_bottom, crop_left:crop_right]
+        
+        # 计算有效区域比例
+        total_pixels = cropped_mask_array.size
+        valid_pixels = np.sum(cropped_mask_array > 0)
+        valid_ratio = valid_pixels / total_pixels if total_pixels > 0 else 0
+        
+        # 如果有效区域大于50%，接受这个crop
+        if valid_ratio > 0.5:
+            cropped_img = img.crop((crop_left, crop_top, crop_right, crop_bottom))
+            cropped_mask = mask.crop((crop_left, crop_top, crop_right, crop_bottom))
+            return cropped_img, cropped_mask
+    
+    # 如果多次尝试都没有找到合适的crop，返回包含最多mask区域的crop
+    crop_left = max(0, center_x - half_size)
+    crop_top = max(0, center_y - half_size)
+    crop_right = min(img_w, crop_left + image_size)
+    crop_bottom = min(img_h, crop_top + image_size)
+    
+    # 调整crop区域确保尺寸正确
+    if crop_right - crop_left < image_size:
+        crop_left = max(0, crop_right - image_size)
+    if crop_bottom - crop_top < image_size:
+        crop_top = max(0, crop_bottom - image_size)
+    
+    cropped_img = img.crop((crop_left, crop_top, crop_right, crop_bottom))
+    cropped_mask = mask.crop((crop_left, crop_top, crop_right, crop_bottom))
+    
+    return cropped_img, cropped_mask
+
+def load_sample_to_dict(sample: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Load a single sample from the dataset into a structured dictionary.
+    
+    Args:
+        sample: Raw sample from webdataset
+        
+    Returns:
+        Structured dictionary containing all the data
+    """
+    result = {
+        'key': sample.get('__key__'),
+        'url': sample.get('__url__'),
+        'local_path': sample.get('__local_path__'),
+        'image': None,
+        'image_size': None,
+        'mask': None
+    }
+    
+    single_image = "jpg" in sample.keys()
+    if single_image:
+        result['image'] = sample['jpg']
+        
+        if result['image'] and hasattr(result['image'], 'size'):
+            result['image_size'] = result['image'].size
+    else:
+        image_keys = [key for key in sample.keys() if key.endswith('jpg')]
+        if image_keys:
+            image_keys.sort()
+            selected_image_key = random.choice(image_keys)
+            selected_image_idx = int(selected_image_key[:-4])
+
+            result['image'] = sample.get(selected_image_key)
+            result['selected_image_idx'] = selected_image_idx
+            
+            if result['image'] and hasattr(result['image'], 'size'):
+                result['image_size'] = result['image'].size
+
+    
+    # Process pickle data
+    if 'pickle' in sample:
+        pickle_data = sample['pickle']
+        if isinstance(pickle_data, bytes):
+            metadata_list = pickle.loads(pickle_data)
+        else:
+            metadata_list = pickle_data
+        
+        if isinstance(metadata_list, dict):
+            metadata_list = [metadata_list]
+            
+        if metadata_list and len(metadata_list) > 0:
+            selected_image_idx = result.get('selected_image_idx', 0)
+                
+            if selected_image_idx < len(metadata_list):
+                metadata = metadata_list[selected_image_idx]
+            else:
+                metadata = metadata_list[0]                
+            result.update({
+                'img_id': metadata.get('img_id'),
+                'ann_id': metadata.get('ann_id'),
+                'image_path': metadata.get('image'),
+                'category': metadata.get('category'),
+                'caption': metadata.get('caption')
+            })
+            
+            if isinstance(metadata['mask_rle'], list):
+                mask_rle = metadata['mask_rle'][selected_image_idx]
+            else:
+                mask_rle = metadata['mask_rle']
+            mask = decode_rle_mask(mask_rle)
+            if isinstance(mask, np.ndarray):
+                mask = mask * 255
+                mask = Image.fromarray(mask, mode='L')
+            result['mask'] = mask
+            result['mask_size'] = mask.size
+
+    result['image'] = short_side_resize(result['image'], 512, Image.Resampling.BICUBIC)
+    result['mask'] = short_side_resize(result['mask'], 512, Image.Resampling.NEAREST)
+    result['image'], result['mask'] = crop_image_and_mask(result['image'], result['mask'], 384)
+        
+    return result
+
+from .VQVAE import get_vqvae_processor, VQVAE
+def construct_messages(sample: Dict[str, Any], vae: VQVAE) -> Dict[str, Any]:
+    """
+    Construct messages from the sample.
+    """
+    # if "jpg" in sample and sample["jpg"] is None:
+    # print(sample)
+    results = load_sample_to_dict(sample)
+    mask = results['mask']
+    mask = mask.resize((128, 128), Image.Resampling.NEAREST)
+    mask = np.array(mask).astype(np.float32) / 255.0
+    
+    indices = vae.encode(mask).cpu().numpy().flatten().tolist()
+
+    seg_token = ["<seg{:03d}>".format(i) for i in indices] # token id from 0-127
+    seg_token = "".join(seg_token)
+    seg_token = "<seg_begin>" + seg_token + "<seg_end>"
+    default_prompt = "According the descritions, give the segmentation masks."
+    messages = [
+        {"role": "user", "content": default_prompt + "\n" + results['caption']},
+        {"role": "assistant", "content": seg_token}
+    ]
+    images = results["image"]
+    return dict(messages=messages, images=[images])
+
+from functools import partial
+def get_process_mask_func():
+    vae = get_vqvae_processor()
+    return partial(construct_messages, vae=vae)

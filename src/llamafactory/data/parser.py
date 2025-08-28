@@ -28,7 +28,7 @@ class DatasetAttr:
     r"""Dataset attributes."""
 
     # basic configs
-    load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file"]
+    load_from: Literal["hf_hub", "ms_hub", "om_hub", "script", "file", "webdataset"]
     dataset_name: str
     formatting: Literal["alpaca", "sharegpt"] = "alpaca"
     ranking: bool = False
@@ -128,12 +128,15 @@ def get_dataset_list(dataset_names: Optional[list[str]], dataset_dir: Union[str,
         has_hf_url = "hf_hub_url" in dataset_info[name]
         has_ms_url = "ms_hub_url" in dataset_info[name]
         has_om_url = "om_hub_url" in dataset_info[name]
+        has_wb_url = "webdataset" in dataset_info[name]
 
-        if has_hf_url or has_ms_url or has_om_url:
+        if has_hf_url or has_ms_url or has_om_url or has_wb_url:
             if has_ms_url and (use_modelscope() or not has_hf_url):
                 dataset_attr = DatasetAttr("ms_hub", dataset_name=dataset_info[name]["ms_hub_url"])
             elif has_om_url and (use_openmind() or not has_hf_url):
                 dataset_attr = DatasetAttr("om_hub", dataset_name=dataset_info[name]["om_hub_url"])
+            elif has_wb_url:
+                dataset_attr = DatasetAttr("webdataset", dataset_name=dataset_info[name]["webdataset"])
             else:
                 dataset_attr = DatasetAttr("hf_hub", dataset_name=dataset_info[name]["hf_hub_url"])
         elif "script_url" in dataset_info[name]:

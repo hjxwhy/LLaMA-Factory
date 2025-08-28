@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import os
+import glob
 from typing import TYPE_CHECKING, Literal, Optional, Union
 
 import json
@@ -23,7 +24,7 @@ from ..extras import logging
 from ..extras.constants import FILEEXT2TYPE
 from ..extras.misc import check_version, has_tokenized_data
 from .converter import align_dataset
-from .data_utils import get_dataset_module, merge_dataset, read_cloud_json, split_dataset
+from .data_utils import get_dataset_module, merge_dataset, read_cloud_json, split_dataset, get_process_mask_func
 from .parser import get_dataset_list
 from .processor import (
     FeedbackDatasetProcessor,
@@ -88,6 +89,21 @@ def _load_single_dataset(
 
         if any(data_path != FILEEXT2TYPE.get(os.path.splitext(data_file)[-1][1:], None) for data_file in data_files):
             raise ValueError("File types should be identical.")
+    elif dataset_attr.load_from == "webdataset":
+        data_path = dataset_attr.dataset_name
+
+        def _find_tar_files(data_path: str):
+            """Find all tar files in the data path."""
+            if os.path.isdir(data_path):
+                pattern = os.path.join(data_path, "**", "*.tar")
+                tar_files = glob.glob(pattern, recursive=True)
+                if not tar_files:
+                    raise FileNotFoundError(f"No tar files found in {data_path}")
+                tar_files.sort()
+                return tar_files
+            else:
+                return glob.glob(data_path)
+        data_files = _find_tar_files(data_path)
     else:
         raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
@@ -128,6 +144,35 @@ def _load_single_dataset(
         )
     elif dataset_attr.load_from == "cloud_file":
         dataset = Dataset.from_list(read_cloud_json(data_path), split=dataset_attr.split)
+    elif dataset_attr.load_from == "webdataset":
+        print("-"* 20)
+        print("webdataset")
+        # dataset = load_dataset(
+        #     "webdataset",
+        #     data_files={"train": data_files},
+        #     split="train",
+        #     streaming=True,
+        # )
+        # dataset_processor = get_process_mask_func()
+        # dataset = dataset.map(dataset_processor)
+        import webdataset as wds
+        from webdataset.shardlists import split_by_node, split_by_worker
+        from datasets import IterableDataset
+        dataset_processor = get_process_mask_func()
+        dataset_wds = wds.WebDataset(
+            data_files, 
+            shardshuffle=10,
+            resampled=True,
+            nodesplitter=split_by_node,
+            workersplitter=split_by_worker
+            ).shuffle(10).decode("pil").map(dataset_processor)
+
+        def webdataset_generator():
+            for sample in dataset_wds:
+                yield sample
+        
+        # dataset = dataset.map(dataset_processor)
+        dataset = IterableDataset.from_generator(webdataset_generator)
     else:
         data_args.streaming = False
         # with open(data_files[0]) as f:
