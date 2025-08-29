@@ -145,8 +145,6 @@ def _load_single_dataset(
     elif dataset_attr.load_from == "cloud_file":
         dataset = Dataset.from_list(read_cloud_json(data_path), split=dataset_attr.split)
     elif dataset_attr.load_from == "webdataset":
-        print("-"* 20)
-        print("webdataset")
         # dataset = load_dataset(
         #     "webdataset",
         #     data_files={"train": data_files},
@@ -161,11 +159,11 @@ def _load_single_dataset(
         dataset_processor = get_process_mask_func()
         dataset_wds = wds.WebDataset(
             data_files, 
-            shardshuffle=10,
+            shardshuffle=100,
             resampled=True,
             nodesplitter=split_by_node,
             workersplitter=split_by_worker
-            ).shuffle(10).decode("pil").map(dataset_processor)
+            ).shuffle(100).decode("pil").map(dataset_processor)
 
         def webdataset_generator():
             for sample in dataset_wds:

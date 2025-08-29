@@ -337,3 +337,10 @@ _register_composite_model(
 _register_composite_model(
     model_type="video_llava",
 )
+
+_register_composite_model(
+    model_type="dinotxt_qwen2_5_vl",
+    projector_key="visual.mlp_projector",
+    vision_model_keys=["visual.backbone", "visual.head"],
+    language_model_keys=["language_model", "lm_head"]
+)

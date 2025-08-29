@@ -93,6 +93,13 @@ class VisionTowerConfig(PretrainedConfig):
         patch_token_layer: int = -1,
         patch_tokens_pooler_type: str = "mean",
         use_linear_projection: bool = False,
+        spatial_merge_size: int = 1,
+        temporal_patch_size: int = 1,
+        tokens_per_second: int = 4,
+        window_size: int = 112,
+        out_hidden_size: int = 3584,
+        fullatt_block_indexes: list[int] = [7, 15, 23, 31],
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.backbone_config = backbone_config
@@ -105,6 +112,13 @@ class VisionTowerConfig(PretrainedConfig):
         self.patch_token_layer = patch_token_layer
         self.patch_tokens_pooler_type = patch_tokens_pooler_type
         self.use_linear_projection = use_linear_projection
+        self.spatial_merge_size = spatial_merge_size
+        self.temporal_patch_size = temporal_patch_size
+        self.tokens_per_second = tokens_per_second
+        self.window_size = window_size
+        self.out_hidden_size = out_hidden_size
+        self.fullatt_block_indexes = fullatt_block_indexes
+        self.initializer_range = initializer_range
         super().__init__(**kwargs)
 
 

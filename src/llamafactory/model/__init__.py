@@ -16,7 +16,7 @@ from .loader import load_config, load_model, load_tokenizer
 from .model_utils.misc import find_all_linear_modules
 from .model_utils.quantization import QuantizationMethod
 from .model_utils.valuehead import load_valuehead_params
-
+from .modeling_dinotxt_qwen2_5_vl import DINOv3ViTQwen2_5_VLForConditionalGeneration, DINOv3ViTQwen2_5_VLModel, DINOv3ViTQwen2_5_VLPreTrainedModel
 
 __all__ = [
     "QuantizationMethod",
@@ -25,4 +25,7 @@ __all__ = [
     "load_model",
     "load_tokenizer",
     "load_valuehead_params",
+    "DINOv3ViTQwen2_5_VLForConditionalGeneration",
+    "DINOv3ViTQwen2_5_VLModel",
+    "DINOv3ViTQwen2_5_VLPreTrainedModel"
 ]

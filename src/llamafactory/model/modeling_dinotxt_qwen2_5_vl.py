@@ -585,7 +585,8 @@ class DINOv3ViTQwen2_5_VLModel(Qwen2_5_VLModel, DINOv3ViTQwen2_5_VLPreTrainedMod
         config.vision_config.language_embed_dim = config.text_config.hidden_size
         self.visual = VisionTower._from_config(config.vision_config)
         self.language_model = Qwen2_5_VLTextModel._from_config(config.text_config)
-
+        self.rope_deltas = None
+        
         self.post_init()
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
@@ -602,6 +603,7 @@ class DINOv3ViTQwen2_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGenera
         r"^model(?!\.(language_model|visual))": "model.language_model",
     }
     _tied_weights_keys = ["lm_head.weight"]
+    config_class = DINOv3ViTQwen2_5_VLConfig
     def __init__(self, config):
         DINOv3ViTQwen2_5_VLPreTrainedModel.__init__(self, config)
         
@@ -610,5 +612,10 @@ class DINOv3ViTQwen2_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGenera
 
         self.post_init()
 
+
+from transformers import AutoConfig, AutoModelForCausalLM
+
+AutoConfig.register("dinotxt_qwen2_5_vl", DINOv3ViTQwen2_5_VLConfig)
+AutoModelForCausalLM.register(DINOv3ViTQwen2_5_VLConfig, DINOv3ViTQwen2_5_VLForConditionalGeneration)
 
 __all__ = ["DINOv3ViTQwen2_5_VLForConditionalGeneration", "DINOv3ViTQwen2_5_VLModel", "DINOv3ViTQwen2_5_VLPreTrainedModel", "DINOv3ViTQwen2_5_VLTextModel"]
