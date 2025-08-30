@@ -26,6 +26,7 @@ import random
 
 import fsspec
 from datasets import DatasetDict, concatenate_datasets, interleave_datasets
+from webdataset.compat import WebDataset
 
 from ..extras import logging
 
@@ -99,7 +100,7 @@ def split_dataset(
 
     dataset_dict = {}
     if dataset is not None:
-        if data_args.streaming:
+        if data_args.streaming and not isinstance(dataset, WebDataset):
             dataset = dataset.shuffle(buffer_size=data_args.buffer_size, seed=seed)
 
         if data_args.val_size > 1e-6:

@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 
 from ..extras import logging
 from .data_utils import Role
+from webdataset.compat import WebDataset
 
 
 if TYPE_CHECKING:
@@ -281,11 +282,11 @@ def get_dataset_converter(name: str, dataset_attr: "DatasetAttr", data_args: "Da
 
 
 def align_dataset(
-    dataset: Union["Dataset", "IterableDataset"],
+    dataset: Union["Dataset", "IterableDataset", "WebDataset"],
     dataset_attr: "DatasetAttr",
     data_args: "DataArguments",
     training_args: "Seq2SeqTrainingArguments",
-) -> Union["Dataset", "IterableDataset"]:
+) -> Union["Dataset", "IterableDataset", "WebDataset"]:
     r"""Align the dataset to a specific format.
 
     Aligned dataset:
@@ -297,7 +298,7 @@ def align_dataset(
     _videos: []
     _audios: []
     """
-    column_names = list(next(iter(dataset)).keys())
+    
     kwargs = {}
     if not data_args.streaming:
         kwargs = dict(
@@ -307,9 +308,14 @@ def align_dataset(
         )
 
     dataset_converter = get_dataset_converter(dataset_attr.formatting, dataset_attr, data_args)
-    return dataset.map(
-        dataset_converter,
-        batched=False,
-        remove_columns=column_names,
-        **kwargs,
-    )
+    if isinstance(dataset, WebDataset):
+        dataset = dataset.map(dataset_converter)
+    else:
+        column_names = list(next(iter(dataset)).keys())
+        dataset =  dataset.map(
+            dataset_converter,
+            batched=False,
+            remove_columns=column_names,
+            **kwargs,
+        )
+    return dataset

@@ -85,10 +85,15 @@ class SupervisedDatasetProcessor(DatasetProcessor):
 
         return input_ids, labels
 
-    def preprocess_dataset(self, examples: dict[str, list[Any]]) -> dict[str, list[Any]]:
+    def preprocess_dataset(self, examples: dict[str, Any]) -> dict[str, list[Any]]:
         # build inputs with format `<bos> X Y <eos>` and labels with format `<ignore> ... <ignore> Y <eos>`
         # for multiturn examples, we only mask the prompt part in each prompt-response pair.
         model_inputs = defaultdict(list)
+        for k, v in examples.items():
+            if isinstance(v, list) and not isinstance(v[0], list):
+                examples[k] = [v]
+            elif not isinstance(v, list):
+                examples[k] = [v]
         for i in range(len(examples["_prompt"])):
             if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
                 logger.warning_rank0(
