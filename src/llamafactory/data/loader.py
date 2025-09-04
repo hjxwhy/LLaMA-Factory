@@ -34,7 +34,8 @@ from .processor import (
     SupervisedDatasetProcessor,
     UnsupervisedDatasetProcessor,
 )
-
+from webdataset.compat import WebDataset
+from webdataset.shardlists import split_by_node, split_by_worker
 
 if TYPE_CHECKING:
     from datasets import Dataset, IterableDataset
@@ -104,6 +105,9 @@ def _load_single_dataset(
             else:
                 return glob.glob(data_path)
         data_files = _find_tar_files(data_path)
+        print("-"*20)
+        print(len(data_files))
+        print("-"*20)
     else:
         raise NotImplementedError(f"Unknown load type: {dataset_attr.load_from}.")
 
@@ -153,24 +157,16 @@ def _load_single_dataset(
         # )
         # dataset_processor = get_process_mask_func()
         # dataset = dataset.map(dataset_processor)
-        import webdataset as wds
-        from webdataset.shardlists import split_by_node, split_by_worker
-        from datasets import IterableDataset
+        
+        # 使用智能设备管理的处理函数，自动处理多机多卡场景
         dataset_processor = get_process_mask_func()
-        dataset_wds = wds.WebDataset(
+        
+        dataset = WebDataset(
             data_files, 
             shardshuffle=100,
-            resampled=True,
             nodesplitter=split_by_node,
             workersplitter=split_by_worker
             ).shuffle(100).decode("pil").map(dataset_processor)
-
-        def webdataset_generator():
-            for sample in dataset_wds:
-                yield sample
-        
-        # dataset = dataset.map(dataset_processor)
-        dataset = IterableDataset.from_generator(webdataset_generator)
     else:
         data_args.streaming = False
         # with open(data_files[0]) as f:
@@ -303,13 +299,16 @@ def _get_preprocessed_dataset(
             desc="Running tokenizer on dataset",
         )
 
-    dataset = dataset.map(
-        dataset_processor.preprocess_dataset,
-        batched=True,
-        batch_size=data_args.preprocessing_batch_size,
-        remove_columns=column_names,
-        **kwargs,
-    )
+    if isinstance(dataset, WebDataset):
+        dataset = dataset.map(dataset_processor.preprocess_dataset).unbatched()
+    else:
+        dataset = dataset.map(
+            dataset_processor.preprocess_dataset,
+            batched=True,
+            batch_size=data_args.preprocessing_batch_size,
+            remove_columns=column_names,
+            **kwargs,
+        )
 
     if training_args.should_log:
         try:

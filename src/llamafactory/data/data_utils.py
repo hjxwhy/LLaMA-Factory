@@ -53,12 +53,12 @@ class Role(str, Enum):
 
 
 class DatasetModule(TypedDict):
-    train_dataset: Optional[Union["Dataset", "IterableDataset"]]
-    eval_dataset: Optional[Union["Dataset", "IterableDataset", dict[str, "Dataset"]]]
+    train_dataset: Optional[Union["Dataset", "IterableDataset", "WebDataset"]]
+    eval_dataset: Optional[Union["Dataset", "IterableDataset", "WebDataset", dict[str, "Dataset"]]]
 
 
 def merge_dataset(
-    all_datasets: list[Union["Dataset", "IterableDataset"]], data_args: "DataArguments", seed: int
+    all_datasets: list[Union["Dataset", "IterableDataset", "WebDataset"]], data_args: "DataArguments", seed: int
 ) -> Union["Dataset", "IterableDataset"]:
     r"""Merge multiple datasets to a unified dataset."""
     if len(all_datasets) == 1:
@@ -86,8 +86,8 @@ def merge_dataset(
 
 
 def split_dataset(
-    dataset: Optional[Union["Dataset", "IterableDataset"]],
-    eval_dataset: Optional[Union["Dataset", "IterableDataset", dict[str, "Dataset"]]],
+    dataset: Optional[Union["Dataset", "IterableDataset", "WebDataset"]],
+    eval_dataset: Optional[Union["Dataset", "IterableDataset", "WebDataset", dict[str, "Dataset"]]],
     data_args: "DataArguments",
     seed: int,
 ) -> "DatasetDict":
@@ -198,6 +198,14 @@ def read_cloud_json(cloud_path: str) -> list[Any]:
 
     return sum([_read_json_with_fs(fs, file) for file in files], [])
 
+def is_none(v):
+    if v is None:
+        return True
+    if isinstance(v, list):
+        if len(v) == 0:
+            return True
+        return all(is_none(item) for item in v)
+    return False
 
 def decode_rle_mask(rle_data: Dict[str, Any]) -> np.ndarray:
     """
@@ -408,6 +416,15 @@ def construct_messages(sample: Dict[str, Any], vae: VQVAE) -> Dict[str, Any]:
     # if "jpg" in sample and sample["jpg"] is None:
     # print(sample)
     results = load_sample_to_dict(sample)
+
+    # assert results["image"] is not None
+    # # 确保图像对象能够被正确序列化
+    # if results["image"] is not None:
+    #     # 将PIL Image转换为numpy数组，避免序列化问题
+    #     img_array = np.array(results["image"])
+    #     # 重新创建PIL Image对象，确保clean state
+    #     results["image"] = Image.fromarray(img_array)
+    
     mask = results['mask']
     mask = mask.resize((128, 128), Image.Resampling.NEAREST)
     mask = np.array(mask).astype(np.float32) / 255.0
@@ -417,9 +434,9 @@ def construct_messages(sample: Dict[str, Any], vae: VQVAE) -> Dict[str, Any]:
     seg_token = ["<seg{:03d}>".format(i) for i in indices] # token id from 0-127
     seg_token = "".join(seg_token)
     seg_token = "<seg_begin>" + seg_token + "<seg_end>"
-    default_prompt = "According the descritions, give the segmentation masks."
+    default_prompt = "<image>" + "According the descritions, give the segmentation masks."
     messages = [
-        {"role": "user", "content": default_prompt + "\n" + results['caption']},
+        {"role": "user", "content": default_prompt + "\n" + results['caption'].replace("<video>", "").replace("<image>", "")},
         {"role": "assistant", "content": seg_token}
     ]
     images = results["image"]

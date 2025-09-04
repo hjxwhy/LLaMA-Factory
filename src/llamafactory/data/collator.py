@@ -14,6 +14,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
+import pickle
+from copy import deepcopy
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, Optional
@@ -26,7 +29,7 @@ from transformers import DataCollatorForSeq2Seq
 
 from ..extras.constants import AUDIO_PLACEHOLDER, IGNORE_INDEX, IMAGE_PLACEHOLDER
 from ..extras.packages import is_pillow_available
-
+from .data_utils import is_none
 
 if is_pillow_available():
     from PIL import Image
@@ -106,6 +109,7 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
             self.get_rope_func = None
 
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, "torch.Tensor"]:
+        # features = deepcopy(features)
         batch_images, batch_videos, batch_audios = [], [], []
         batch_imglens, batch_vidlens, batch_audlens, batch_input_ids = [], [], [], []
         for feature in features:
@@ -208,8 +212,21 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
                     dim=-1
                 ).unsqueeze(-1)
             else:  # for qwen2vl
-                features["position_ids"], features["rope_deltas"] = self.get_rope_func(**rope_index_kwargs)
-
+                try:
+                    features["position_ids"], features["rope_deltas"] = self.get_rope_func(**rope_index_kwargs)
+                except Exception as e:
+                    mm_inputs.update(dict(
+                        batch_images=batch_images,
+                        batch_videos=batch_videos,
+                        batch_audios=batch_audios,
+                        batch_imglens=batch_imglens,
+                        batch_vidlens=batch_vidlens,
+                        batch_audlens=batch_audlens,
+                        batch_input_ids=batch_input_ids,
+                    )
+                    )
+                    _save_debug_data_on_rope_error(e, rope_index_kwargs, features, mm_inputs, self.model, self.processor)
+                    raise IOError
         if (
             self.model is not None
             and getattr(self.model.config, "model_type", None)
@@ -243,6 +260,7 @@ class SFTDataCollatorWith4DAttentionMask(MultiModalDataCollatorForSeq2Seq):
     compute_dtype: "torch.dtype" = torch.float32
 
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, "torch.Tensor"]:
+        features = deepcopy(features)
         features = super().__call__(features)
         if self.block_diag_attn and self.attn_implementation != "flash_attention_2":
             features["attention_mask"] = prepare_4d_attention_mask(features["attention_mask"], self.compute_dtype)
@@ -322,3 +340,69 @@ class KTODataCollatorWithPadding(MultiModalDataCollatorForSeq2Seq):
 
         batch["kto_tags"] = torch.tensor(kto_tags)
         return batch
+
+def _save_debug_data_on_rope_error(
+    exception: Exception,
+    rope_index_kwargs: dict,
+    features: dict,
+    mm_inputs: dict,
+    model: Any,
+    processor: Any,
+    debug_dir_suffix: str = ""
+) -> None:
+    """Save debugging data when rope index error occurs."""
+    debug_dir = f"debug_rope_index_error{debug_dir_suffix}"
+    os.makedirs(debug_dir, exist_ok=True)
+    
+    print(f"DEBUG: Exception in get_rope_index: {exception}")
+    
+    # Save rope_index_kwargs
+    rope_kwargs_file = os.path.join(debug_dir, "rope_index_kwargs.pkl")
+    with open(rope_kwargs_file, 'wb') as f:
+        # Convert tensors to CPU for saving
+        rope_kwargs_cpu = {}
+        for key, value in rope_index_kwargs.items():
+            if torch.is_tensor(value):
+                rope_kwargs_cpu[key] = value.cpu()
+            else:
+                rope_kwargs_cpu[key] = value
+        pickle.dump(rope_kwargs_cpu, f)
+    print(f"DEBUG: Saved rope_index_kwargs to {rope_kwargs_file}")
+    
+    # Save features
+    features_file = os.path.join(debug_dir, "features.pkl")
+    with open(features_file, 'wb') as f:
+        # Convert tensors to CPU for saving
+        features_cpu = {}
+        for key, value in features.items():
+            if torch.is_tensor(value):
+                features_cpu[key] = value.cpu()
+            else:
+                features_cpu[key] = value
+        pickle.dump(features_cpu, f)
+    print(f"DEBUG: Saved features to {features_file}")
+    
+    # Save mm_inputs for additional context
+    mm_inputs_file = os.path.join(debug_dir, "mm_inputs.pkl")
+    with open(mm_inputs_file, 'wb') as f:
+        # Convert tensors to CPU for saving
+        mm_inputs_cpu = {}
+        for key, value in mm_inputs.items():
+            if torch.is_tensor(value):
+                mm_inputs_cpu[key] = value.cpu()
+            else:
+                mm_inputs_cpu[key] = value
+        pickle.dump(mm_inputs_cpu, f)
+    print(f"DEBUG: Saved mm_inputs to {mm_inputs_file}")
+    
+    # Save model config info
+    model_info_file = os.path.join(debug_dir, "model_info.txt")
+    with open(model_info_file, 'w') as f:
+        f.write(f"Model type: {getattr(model.config, 'model_type', 'Unknown')}\n")
+        f.write(f"Model config: {model.config}\n")
+        f.write(f"Processor type: {type(processor)}\n")
+        f.write(f"Exception: {str(exception)}\n")
+        f.write(f"Exception type: {type(exception)}\n")
+    print(f"DEBUG: Saved model info to {model_info_file}")
+    
+    print(f"DEBUG: All debugging data saved to {debug_dir}/")

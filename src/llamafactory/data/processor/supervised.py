@@ -11,13 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from copy import deepcopy
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional
 
 from ...extras import logging
 from ...extras.constants import IGNORE_INDEX
+from ..data_utils import is_none
 from .processor_utils import DatasetProcessor, greedy_knapsack, infer_seqlen
 
 
@@ -101,6 +102,9 @@ class SupervisedDatasetProcessor(DatasetProcessor):
                 )
                 continue
 
+            # if is_none(examples["_images"][i]):
+            #     raise ValueError("before encode data example, images is None")
+
             input_ids, labels = self._encode_data_example(
                 prompt=examples["_prompt"][i],
                 response=examples["_response"][i],
@@ -110,6 +114,9 @@ class SupervisedDatasetProcessor(DatasetProcessor):
                 videos=examples["_videos"][i] or [],
                 audios=examples["_audios"][i] or [],
             )
+
+            # if is_none(examples["_images"][i]):
+            #     raise ValueError("after encode data example, images is None")
             model_inputs["input_ids"].append(input_ids)
             model_inputs["attention_mask"].append([1] * len(input_ids))
             model_inputs["labels"].append(labels)
