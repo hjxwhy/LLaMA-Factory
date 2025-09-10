@@ -1,3 +1,40 @@
+#!/usr/bin/env python3
+"""
+Flexible Model Inference Script for Mask Prediction
+
+This script provides a flexible interface to run mask prediction inference using:
+- Qwen2.5-VL model only
+- DINOv3-Qwen2.5-VL model only  
+- Both models for comparison
+
+Usage Examples:
+    # Run only Qwen2.5-VL model on 10 samples
+    python dinov3_qwen2_5_infer.py --model qwen --num-samples 10
+
+    # Run only DINOv3-Qwen2.5-VL model with custom output directory
+    python dinov3_qwen2_5_infer.py --model dino --output-dir ./my_results
+
+    # Run both models for comparison (default behavior)
+    python dinov3_qwen2_5_infer.py --model both --num-samples 20
+
+    # Use custom model paths and generation parameters
+    python dinov3_qwen2_5_infer.py --model both \
+        --qwen-model-dir /path/to/qwen/model \
+        --dino-model-dir /path/to/dino/model \
+        --max-new-tokens 256 \
+        --temperature 0.7
+
+Output Files:
+    - When --model=qwen: GT mask + Qwen2.5-VL prediction visualizations
+    - When --model=dino: GT mask + DINOv3-Qwen2.5-VL prediction visualizations  
+    - When --model=both: GT mask + individual predictions + three-way comparison
+
+Color Coding:
+    - Red: Ground Truth
+    - Green: Qwen2.5-VL predictions
+    - Blue: DINOv3-Qwen2.5-VL predictions
+"""
+
 import os
 import sys
 import torch
@@ -5,11 +42,13 @@ import numpy as np
 import glob
 import random
 import re
+import argparse
 from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms.functional as TF
 sys.path.append("/jfs/jensen/code/LLaMA-Factory")
 
 from transformers import AutoProcessor
+from transformers import Qwen2_5_VLForConditionalGeneration
 from src.llamafactory.model.modeling_dinotxt_qwen2_5_vl import DINOv3ViTQwen2_5_VLForConditionalGeneration
 from src.llamafactory.data.data_utils import get_process_mask_func, get_vqvae_processor
 from webdataset.compat import WebDataset
@@ -80,6 +119,40 @@ def blend_mask_with_image(image, mask, alpha=0.5, color=[255, 0, 0]):
     
     # Convert back to PIL Image
     return Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
+
+
+def create_three_way_comparison(image, gt_mask, qwen_pred, dino_pred, alpha=0.6):
+    """
+    Create a three-way comparison visualization: GT | Qwen2.5 | DINOv3.
+    
+    Args:
+        image: PIL Image - original image
+        gt_mask: torch tensor - ground truth mask
+        qwen_pred: torch tensor - Qwen2.5 model prediction
+        dino_pred: torch tensor - DINOv3 model prediction
+        alpha: float - transparency of mask overlays
+        
+    Returns:
+        PIL Image: Combined visualization
+    """
+    # Create visualizations with different colors
+    gt_vis = blend_mask_with_image(image, gt_mask, alpha=alpha, color=[255, 0, 0])  # Red for GT
+    qwen_vis = blend_mask_with_image(image, qwen_pred, alpha=alpha, color=[0, 255, 0])  # Green for Qwen2.5
+    dino_vis = blend_mask_with_image(image, dino_pred, alpha=alpha, color=[0, 0, 255])  # Blue for DINOv3
+    
+    # Add text labels
+    gt_vis_labeled = add_text_to_image(gt_vis, "Ground Truth", position="top", font_size=24, color=(255, 255, 255), bg_color=(255, 0, 0))
+    qwen_vis_labeled = add_text_to_image(qwen_vis, "Qwen2.5-VL", position="top", font_size=24, color=(255, 255, 255), bg_color=(0, 255, 0))
+    dino_vis_labeled = add_text_to_image(dino_vis, "DINOv3-Qwen2.5", position="top", font_size=24, color=(255, 255, 255), bg_color=(0, 0, 255))
+    
+    # Combine horizontally: GT | Qwen2.5 | DINOv3
+    total_width = gt_vis_labeled.width + qwen_vis_labeled.width + dino_vis_labeled.width
+    combined = Image.new('RGB', (total_width, gt_vis_labeled.height))
+    combined.paste(gt_vis_labeled, (0, 0))
+    combined.paste(qwen_vis_labeled, (gt_vis_labeled.width, 0))
+    combined.paste(dino_vis_labeled, (gt_vis_labeled.width + qwen_vis_labeled.width, 0))
+    
+    return combined
 
 
 def create_visualization_grid(images, masks, predictions, save_path, n_cols=4):
@@ -260,13 +333,82 @@ def add_text_to_image(image, text, position="top", font_size=20, color=(255, 255
     return img_with_text
 
 
+def parse_arguments():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Compare Qwen2.5-VL and DINOv3-Qwen2.5-VL models for mask prediction",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python dinov3_qwen2_5_infer.py --model qwen --num-samples 10
+  python dinov3_qwen2_5_infer.py --model dino --output-dir ./my_results  
+  python dinov3_qwen2_5_infer.py --model both --num-samples 20
+        """
+    )
+    
+    # Model selection
+    parser.add_argument("--model", type=str, choices=["qwen", "dino", "both"], default="both",
+                        help="Which model(s) to run: 'qwen' for Qwen2.5-VL only, 'dino' for DINOv3-Qwen2.5-VL only, 'both' for comparison")
+    
+    # Model paths
+    parser.add_argument("--qwen-model-dir", type=str, default="/data1/saves/qwen2_5vl-7b/full/qwen_seg/checkpoint-50000",
+                        help="Path to Qwen2.5-VL model directory")
+    parser.add_argument("--dino-model-dir", type=str, default="/data1/saves/qwen2_5vl-7b/full/debug",
+                        help="Path to DINOv3-Qwen2.5-VL model directory")
+    
+    # Data and processing
+    parser.add_argument("--data-path", type=str, default="/jfs/qwen_models/describe-anything-dataset",
+                        help="Path to the dataset")
+    parser.add_argument("--num-samples", type=int, default=20,
+                        help="Number of samples to process")
+    parser.add_argument("--output-dir", type=str, default="./vis",
+                        help="Output directory for visualizations")
+    
+    # Generation parameters
+    parser.add_argument("--max-new-tokens", type=int, default=128,
+                        help="Maximum number of new tokens to generate")
+    parser.add_argument("--temperature", type=float, default=0.5,
+                        help="Generation temperature")
+    
+    return parser.parse_args()
+
+
+def run_model_inference(model, processor, messages, original_image, max_new_tokens=128, temperature=0.5):
+    """Run inference on a single model and return the output text."""
+    text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    image_inputs, video_inputs = process_vision_info(messages)
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )
+    
+    with torch.no_grad():
+        outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, temperature=temperature, do_sample=True)
+    
+    generated_ids_trimmed = [
+        out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, outputs)
+    ]
+    output_text = processor.batch_decode(
+        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )[0]
+    
+    return output_text
+
+
 def main():
     """Main function to run the mask prediction and visualization pipeline."""
-    os.makedirs("./vis", exist_ok=True)
-    # 1. Load data and initialize model
-    print("Loading dataset and model...")
-    data_path = "/jfs/qwen_models/describe-anything-dataset"
-    data_files = _find_tar_files(data_path)
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+    
+    # 1. Load data and initialize models
+    print("Loading dataset...")
+    data_files = _find_tar_files(args.data_path)
     random.shuffle(data_files)
     dataset_processor = get_process_mask_func()
 
@@ -275,20 +417,40 @@ def main():
         shardshuffle=100,
     ).shuffle(100).decode("pil").map(dataset_processor)
 
-    model_dir = "/data1/saves/qwen2_5vl-7b/full/debug"
-    processor = AutoProcessor.from_pretrained(model_dir)
-    model = DINOv3ViTQwen2_5_VLForConditionalGeneration.from_pretrained(
-        model_dir, 
-        torch_dtype=torch.bfloat16, 
-        device_map="auto", 
-        attn_implementation="flash_attention_2"
-    )
+    # Initialize models based on selection
+    qwen_model, qwen_processor = None, None
+    dino_model, dino_processor = None, None
+    
+    if args.model in ["qwen", "both"]:
+        print("Loading Qwen2.5-VL model...")
+        qwen_processor = AutoProcessor.from_pretrained(args.qwen_model_dir)
+        qwen_model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+            args.qwen_model_dir, 
+            torch_dtype=torch.bfloat16, 
+            device_map="auto", 
+            attn_implementation="flash_attention_2"
+        )
+        print("Qwen2.5-VL model loaded successfully")
+    
+    if args.model in ["dino", "both"]:
+        print("Loading DINOv3-Qwen2.5-VL model...")
+        dino_processor = AutoProcessor.from_pretrained(args.dino_model_dir)
+        dino_model = DINOv3ViTQwen2_5_VLForConditionalGeneration.from_pretrained(
+            args.dino_model_dir,
+            torch_dtype=torch.bfloat16,
+            device_map="auto",
+            attn_implementation="flash_attention_2"
+        )
+        print("DINOv3-Qwen2.5-VL model loaded successfully")
+    
     vae = get_vqvae_processor()
     
-    print("Processing samples...")
+    print(f"Model mode: {args.model}")
+    print(f"Processing up to {args.num_samples} samples...")
+    print(f"Output directory: {args.output_dir}")
+    
     for i, data in enumerate(dataset):
         print(f"\n--- Sample {i+1} ---")
-        print("Data keys:", list(data.keys()))
         
         # Get original image and GT mask
         original_image = data["images"][0]  # PIL Image
@@ -297,14 +459,14 @@ def main():
         print(f"Image size: {original_image.size}")
         print(f"GT mask text preview: {gt_mask_text[:100]}...")
         
-        # 2. Parse GT mask tokens
+        # Parse GT mask tokens
         gt_token_ids = parse_mask_tokens(gt_mask_text)
         if gt_token_ids is None:
             print("Failed to parse GT mask tokens, skipping...")
             continue
         print(f"GT token count: {len(gt_token_ids)}")
         
-        # 3. Model inference
+        # Prepare messages for model inference
         messages = [{
             "role": "user",
             "content": [
@@ -313,75 +475,105 @@ def main():
             ]
         }]
         
-        text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        image_inputs, video_inputs = process_vision_info(messages)
-        inputs = processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=True,
-            return_tensors="pt",
-        )
+        # Run model inference based on selection
+        qwen_output_text = None
+        dino_output_text = None
         
-        with torch.no_grad():
-            outputs = model.generate(**inputs, max_new_tokens=128, temperature=0.5, do_sample=True)
+        if qwen_model is not None:
+            print("Running Qwen2.5-VL inference...")
+            qwen_output_text = run_model_inference(
+                qwen_model, qwen_processor, messages, original_image, 
+                args.max_new_tokens, args.temperature
+            )
+            print(f"Qwen2.5-VL output: {qwen_output_text}")
         
-        generated_ids_trimmed = [
-            out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, outputs)
-        ]
-        output_text = processor.batch_decode(
-            generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )[0]
+        if dino_model is not None:
+            print("Running DINOv3-Qwen2.5-VL inference...")
+            dino_output_text = run_model_inference(
+                dino_model, dino_processor, messages, original_image,
+                args.max_new_tokens, args.temperature
+            )
+            print(f"DINOv3-Qwen2.5-VL output: {dino_output_text}")
         
-        print(f"Model output: {output_text}")
+        # Parse predicted mask tokens
+        qwen_token_ids = None
+        dino_token_ids = None
         
-        # 4. Parse predicted mask tokens
-        pred_token_ids = parse_mask_tokens(output_text)
-        if pred_token_ids is None:
-            print("No mask tokens found in prediction, skipping...")
-            continue
-        print(f"Predicted token count: {len(pred_token_ids)}")
+        if qwen_output_text is not None:
+            qwen_token_ids = parse_mask_tokens(qwen_output_text)
+            if qwen_token_ids is not None:
+                print(f"Qwen2.5-VL token count: {len(qwen_token_ids)}")
+            else:
+                print("No mask tokens found in Qwen2.5-VL prediction")
         
-        # 5. Decode masks using VAE
+        if dino_output_text is not None:
+            dino_token_ids = parse_mask_tokens(dino_output_text)
+            if dino_token_ids is not None:
+                print(f"DINOv3-Qwen2.5-VL token count: {len(dino_token_ids)}")
+            else:
+                print("No mask tokens found in DINOv3-Qwen2.5-VL prediction")
+        
+        # Decode masks using VAE
         gt_mask = decode_mask_tokens(gt_token_ids, vae)
-        pred_mask = decode_mask_tokens(pred_token_ids, vae)
+        qwen_mask = decode_mask_tokens(qwen_token_ids, vae) if qwen_token_ids is not None else None
+        dino_mask = decode_mask_tokens(dino_token_ids, vae) if dino_token_ids is not None else None
         
-        if gt_mask is None or pred_mask is None:
-            print("Failed to decode masks, skipping...")
+        if gt_mask is None:
+            print("Failed to decode GT mask, skipping...")
             continue
         
-        # 6. Resize masks to image size and create visualizations
+        # Resize masks to image size
         target_size = original_image.size  # (width, height)
         gt_mask_resized = resize_mask_to_image(gt_mask, target_size)
-        pred_mask_resized = resize_mask_to_image(pred_mask, target_size)
+        qwen_mask_resized = resize_mask_to_image(qwen_mask, target_size) if qwen_mask is not None else None
+        dino_mask_resized = resize_mask_to_image(dino_mask, target_size) if dino_mask is not None else None
         
-        # Create blended visualizations
+        # Create visualizations based on available models
+        saved_files = []
+        
+        if args.model == "both" and qwen_mask_resized is not None and dino_mask_resized is not None:
+            # Three-way comparison
+            comparison_vis = create_three_way_comparison(
+                original_image, 
+                gt_mask_resized, 
+                qwen_mask_resized, 
+                dino_mask_resized
+            )
+            comparison_path = f"{args.output_dir}/three_way_comparison_sample_{i+1}.png"
+            comparison_vis.save(comparison_path)
+            saved_files.append(f"Three-way comparison: {comparison_path}")
+            
+        # Individual visualizations
         gt_vis = blend_mask_with_image(original_image, gt_mask_resized, alpha=0.6, color=[255, 0, 0])
-        pred_vis = blend_mask_with_image(original_image, pred_mask_resized, alpha=0.6, color=[0, 255, 0])
-        
-        # Add text labels to visualizations
         gt_vis_labeled = add_text_to_image(gt_vis, "Ground Truth", position="top", font_size=24, color=(255, 255, 255), bg_color=(255, 0, 0))
-        pred_vis_labeled = add_text_to_image(pred_vis, "Prediction", position="top", font_size=24, color=(255, 255, 255), bg_color=(0, 255, 0))
+        gt_path = f"{args.output_dir}/gt_mask_sample_{i+1}.png"
+        gt_vis_labeled.save(gt_path)
+        saved_files.append(f"GT mask: {gt_path}")
         
-        # Save individual visualizations
-        gt_vis_labeled.save(f"./vis/gt_mask_sample_{i+1}.png")
-        pred_vis_labeled.save(f"./vis/pred_mask_sample_{i+1}.png")
+        if qwen_mask_resized is not None:
+            qwen_vis = blend_mask_with_image(original_image, qwen_mask_resized, alpha=0.6, color=[0, 255, 0])
+            qwen_vis_labeled = add_text_to_image(qwen_vis, "Qwen2.5-VL", position="top", font_size=24, color=(255, 255, 255), bg_color=(0, 255, 0))
+            qwen_path = f"{args.output_dir}/qwen_pred_sample_{i+1}.png"
+            qwen_vis_labeled.save(qwen_path)
+            saved_files.append(f"Qwen2.5-VL prediction: {qwen_path}")
         
-        # Create comparison grid with labels
-        combined_width = gt_vis_labeled.width + pred_vis_labeled.width
-        combined = Image.new('RGB', (combined_width, gt_vis_labeled.height))
-        combined.paste(gt_vis_labeled, (0, 0))
-        combined.paste(pred_vis_labeled, (gt_vis_labeled.width, 0))
-        combined.save(f"./vis/comparison_sample_{i+1}.png")
+        if dino_mask_resized is not None:
+            dino_vis = blend_mask_with_image(original_image, dino_mask_resized, alpha=0.6, color=[0, 0, 255])
+            dino_vis_labeled = add_text_to_image(dino_vis, "DINOv3-Qwen2.5", position="top", font_size=24, color=(255, 255, 255), bg_color=(0, 0, 255))
+            dino_path = f"{args.output_dir}/dino_pred_sample_{i+1}.png"
+            dino_vis_labeled.save(dino_path)
+            saved_files.append(f"DINOv3-Qwen2.5-VL prediction: {dino_path}")
         
-        print(f"Visualizations saved:")
-        print(f"  - GT mask: ./vis/gt_mask_sample_{i+1}.png")
-        print(f"  - Predicted mask: ./vis/pred_mask_sample_{i+1}.png")
-        print(f"  - Comparison: ./vis/comparison_sample_{i+1}.png")
+        print("Visualizations saved:")
+        for file_info in saved_files:
+            print(f"  - {file_info}")
         
-        # Process only first few samples for testing
-        if i >= 10:
+        # Check if we've processed enough samples
+        if i >= args.num_samples - 1:
             break
+    
+    print(f"\nProcessing complete! Processed {min(i+1, args.num_samples)} samples.")
+    print(f"All visualizations saved to: {args.output_dir}")
 
 
 if __name__ == "__main__":

@@ -27,6 +27,7 @@ import random
 import fsspec
 from datasets import DatasetDict, concatenate_datasets, interleave_datasets
 from webdataset.compat import WebDataset
+from datasets import Dataset, IterableDataset
 
 from ..extras import logging
 
@@ -63,6 +64,10 @@ def merge_dataset(
     r"""Merge multiple datasets to a unified dataset."""
     if len(all_datasets) == 1:
         return all_datasets[0]
+    
+    elif isinstance(all_datasets[0], WebDataset):
+        from webdataset.mix import RandomMix
+        return RandomMix(all_datasets)
 
     elif data_args.mix_strategy == "concat":
         if data_args.streaming:
@@ -100,7 +105,7 @@ def split_dataset(
 
     dataset_dict = {}
     if dataset is not None:
-        if data_args.streaming and not isinstance(dataset, WebDataset):
+        if data_args.streaming and isinstance(dataset, IterableDataset):
             dataset = dataset.shuffle(buffer_size=data_args.buffer_size, seed=seed)
 
         if data_args.val_size > 1e-6:
@@ -238,6 +243,69 @@ def short_side_resize(img: Image.Image, image_size: int, mode: Image.Resampling 
             new_w = int(w * image_size / h)
         img = img.resize((new_w, new_h), resample=mode)
         return img
+
+def process_recaption_dataset(example: Dict[str, Any]):
+    image = example['jpg']
+    image = short_side_resize_and_random_crop(image, 384, Image.Resampling.BICUBIC)
+
+    conversations = example['json']
+    # Remap keys and values: from -> role, value -> content, human -> user, gpt -> assistant, system -> system
+    for conv in conversations:
+        if 'from' in conv:
+            conv['role'] = conv.pop('from')
+        if 'value' in conv:
+            conv['content'] = conv.pop('value')
+        if conv.get('role') == 'human':
+            conv['role'] = 'user'
+        elif conv.get('role') == 'gpt':
+            conv['role'] = 'assistant'
+    return {"images": [image], "messages": conversations}
+
+def short_side_resize_and_random_crop(example: Union[Image.Image, Dict[str, Any]], target_size: int, mode: Image.Resampling = Image.Resampling.BICUBIC):
+    """
+    沿着短边resize然后random crop指定大小的图像
+    
+    Args:
+        img: 输入图像
+        target_size: 目标大小（正方形）
+        mode: 重采样模式
+        
+    Returns:
+        处理后的图像
+    """
+    if isinstance(example, dict):
+        img = example['image']
+    else:
+        img = example
+    
+    w, h = img.size
+    
+    # 沿着短边resize，确保短边至少等于target_size
+    if w < h:
+        new_w = target_size
+        new_h = int(h * target_size / w)
+    else:
+        new_h = target_size
+        new_w = int(w * target_size / h)
+    
+    # Resize图像
+    img = img.resize((new_w, new_h), resample=mode)
+    
+    # Random crop到目标大小
+    new_w, new_h = img.size
+    
+    # 随机选择crop的起始位置
+    left = random.randint(0, new_w - target_size)
+    top = random.randint(0, new_h - target_size)
+    right = left + target_size
+    bottom = top + target_size
+    
+    img = img.crop((left, top, right, bottom))
+    if isinstance(example, dict):
+        example['image'] = img
+    else:
+        example = img
+    return example
 
 def crop_image_and_mask(img: Image.Image, mask: Image.Image, image_size: int):
     # 需要根据mask来crop图片和mask, crop出来的mask有效区域（mask>0）需要大于50%，如果小于50%需要重新生成crop区域的边界

@@ -1,4 +1,33 @@
 { 
+  "LLaVA-ReCap-558K": {
+    "hf_hub_url": "/jfs/qwen_models/LLaVA-ReCap-558K",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "conversations",
+      "images": "image"
+    },
+    "tags":{
+      "role_tag": "from",
+      "content_tag": "value",
+      "user_tag": "human",
+      "assistant_tag": "gpt"
+    }
+  },
+  "LLaVA-ReCap-558K-wds": {
+    "webdataset": "/jfs/jensen/code/LLaMA-Factory/data/data/LLaVA-ReCap-558K-wds",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant",
+      "system_tag":"system"
+    }
+  },
   "describe_anything": {
     "webdataset": "/jfs/qwen_models/describe-anything-dataset",
     "formatting": "sharegpt",

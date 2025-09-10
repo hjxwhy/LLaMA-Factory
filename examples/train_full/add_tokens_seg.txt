@@ -255,7 +255,6 @@
 <ACTION_254>
 <ACTION_255>
 <seg_begin>
-<seg_end>
 <seg000>
 <seg001>
 <seg002>
@@ -384,3 +383,4 @@
 <seg125>
 <seg126>
 <seg127>
+<seg_end>

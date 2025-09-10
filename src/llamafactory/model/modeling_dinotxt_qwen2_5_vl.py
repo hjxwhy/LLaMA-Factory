@@ -1,19 +1,22 @@
 import logging
 from functools import partial
-from typing import Optional, Tuple, Callable
+from typing import Optional, Tuple, Callable, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 
 from transformers.modeling_utils import PreTrainedModel
-from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, auto_docstring, logging
+from transformers.cache_utils import Cache
+from transformers.processing_utils import Unpack
+from transformers.utils import TransformersKwargs
+from transformers.utils import add_start_docstrings, add_start_docstrings_to_model_forward, auto_docstring, logging, can_return_tuple
 from transformers.configuration_utils import PretrainedConfig
 
 from transformers.models.dinov3_vit.modeling_dinov3_vit import DINOv3ViTAttention, DINOv3ViTLayerScale, DINOv3ViTDropPath, DINOv3ViTModel
 from transformers.models.dinov3_vit.configuration_dinov3_vit import DINOv3ViTConfig
 
-from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLModel, Qwen2_5_VLTextModel, Qwen2_5_VLForConditionalGeneration
+from transformers.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLModel, Qwen2_5_VLTextModel, Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLCausalLMOutputWithPast
 
 from .configuration_dinotxt_qwen2_5_vl import DINOv3ViTQwen2_5_VLConfig, VisionTowerConfig, VisionHeadConfig
 
@@ -586,16 +589,45 @@ class DINOv3ViTQwen2_5_VLModel(Qwen2_5_VLModel, DINOv3ViTQwen2_5_VLPreTrainedMod
         self.visual = VisionTower._from_config(config.vision_config)
         self.language_model = Qwen2_5_VLTextModel._from_config(config.text_config)
         self.rope_deltas = None
+        # self.segmentation_tokens = nn.Embedding(130, config.text_config.hidden_size)
         
         self.post_init()
 
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         pixel_values = pixel_values.to(self.visual.backbone.dtype)
-        image_features = self.visual(pixel_values, image_grid_thw)[1]
-        image_features = image_features.reshape(-1, image_features.shape[-1])
         split_sizes = image_grid_thw.prod(-1).tolist()
-        image_features = torch.split(image_features, split_sizes)
-        return image_features
+        pixel_values_list = torch.split(pixel_values, split_sizes)
+        image_features_list = []
+        for i, pixel_values in enumerate(pixel_values_list):
+            image_features = self.visual(pixel_values, image_grid_thw[i:i+1])[1]
+            image_features = image_features.reshape(-1, image_features.shape[-1])
+            image_features_list.append(image_features)
+        # image_features = torch.cat(image_features_list, dim=0)
+        return image_features_list
+
+        # image_features = self.visual(pixel_values, image_grid_thw)[1]
+        # image_features = image_features.reshape(-1, image_features.shape[-1])
+        # split_sizes = image_grid_thw.prod(-1).tolist()
+        # image_features = torch.split(image_features, split_sizes)
+        # return image_features
+    
+    # def forward(self, *args, **kwargs):
+    #     # 151922, 152050
+    #     if kwargs.get("inputs_embeds", None) is None:
+    #         input_ids = kwargs.get("input_ids", None)
+    #         segmentation_mask = (input_ids >= 151921) & (input_ids <= 152050)
+    #         segmentation_ids = input_ids[segmentation_mask]
+    #         segmentation_ids = segmentation_ids - 151921
+    #         segmentation_embeds = self.segmentation_tokens(segmentation_ids)
+
+    #         inputs_embeds = self.get_input_embeddings()(kwargs.get("input_ids", None))
+    #         segmentation_mask_expanded = segmentation_mask.unsqueeze(-1).expand_as(inputs_embeds)
+    #         # inputs_embeds = torch.masked_scatter(inputs_embeds, segmentation_mask_expanded, segmentation_embeds.to(inputs_embeds.dtype))
+    #         inputs_embeds.masked_scatter_(segmentation_mask_expanded, segmentation_embeds)
+
+    #         kwargs["inputs_embeds"] = inputs_embeds
+    #     outputs = Qwen2_5_VLModel.forward(self, *args, **kwargs)
+    #     return outputs
 
 class DINOv3ViTQwen2_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGeneration, DINOv3ViTQwen2_5_VLPreTrainedModel):
     _checkpoint_conversion_mapping = {
@@ -609,8 +641,84 @@ class DINOv3ViTQwen2_5_VLForConditionalGeneration(Qwen2_5_VLForConditionalGenera
         
         self.model = DINOv3ViTQwen2_5_VLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        # self.segmentation_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
+
+    # @can_return_tuple
+    # @auto_docstring
+    # def forward(
+    #     self,
+    #     input_ids: torch.LongTensor = None,
+    #     attention_mask: Optional[torch.Tensor] = None,
+    #     position_ids: Optional[torch.LongTensor] = None,
+    #     past_key_values: Optional[Cache] = None,
+    #     inputs_embeds: Optional[torch.FloatTensor] = None,
+    #     labels: Optional[torch.LongTensor] = None,
+    #     use_cache: Optional[bool] = None,
+    #     output_attentions: Optional[bool] = None,
+    #     output_hidden_states: Optional[bool] = None,
+    #     pixel_values: Optional[torch.Tensor] = None,
+    #     pixel_values_videos: Optional[torch.FloatTensor] = None,
+    #     image_grid_thw: Optional[torch.LongTensor] = None,
+    #     video_grid_thw: Optional[torch.LongTensor] = None,
+    #     rope_deltas: Optional[torch.LongTensor] = None,
+    #     cache_position: Optional[torch.LongTensor] = None,
+    #     second_per_grid_ts: Optional[torch.Tensor] = None,
+    #     logits_to_keep: Union[int, torch.Tensor] = 0,
+    #     **kwargs: Unpack[TransformersKwargs],
+    # ) -> Union[tuple, Qwen2_5_VLCausalLMOutputWithPast]:
+    #     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+    #     output_hidden_states = (
+    #         output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+    #     )
+
+    #     outputs = self.model(
+    #         input_ids=input_ids,
+    #         pixel_values=pixel_values,
+    #         pixel_values_videos=pixel_values_videos,
+    #         image_grid_thw=image_grid_thw,
+    #         video_grid_thw=video_grid_thw,
+    #         second_per_grid_ts=second_per_grid_ts,
+    #         position_ids=position_ids,
+    #         attention_mask=attention_mask,
+    #         past_key_values=past_key_values,
+    #         inputs_embeds=inputs_embeds,
+    #         use_cache=use_cache,
+    #         output_attentions=output_attentions,
+    #         output_hidden_states=output_hidden_states,
+    #         return_dict=True,
+    #         cache_position=cache_position,
+    #         **kwargs,
+    #     )
+
+    #     hidden_states = outputs[0]
+
+    #     # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+    #     slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+    #     logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+    #     segmentation_mask = (input_ids >= 151921) & (input_ids <= 152050)
+    #     segmentation_mask_expanded = segmentation_mask.unsqueeze(-1).expand_as(hidden_states)
+    #     segmentation_hidden_states = torch.masked_select(hidden_states, segmentation_mask_expanded).reshape(-1, hidden_states.shape[-1])
+    #     segmentation_logits = self.segmentation_head(segmentation_hidden_states)
+    #     segmentation_logits_mask = segmentation_mask.unsqueeze(-1).expand_as(logits)
+    #     logits.masked_scatter_(segmentation_logits_mask, segmentation_logits)
+
+    #     loss = None
+    #     if labels is not None:
+    #         loss = self.loss_function(
+    #             logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+    #         )
+
+    #     return Qwen2_5_VLCausalLMOutputWithPast(
+    #         loss=loss,
+    #         logits=logits,
+    #         past_key_values=outputs.past_key_values,
+    #         hidden_states=outputs.hidden_states,
+    #         attentions=outputs.attentions,
+    #         rope_deltas=outputs.rope_deltas,
+    #     )
 
 
 from transformers import AutoConfig, AutoModelForCausalLM

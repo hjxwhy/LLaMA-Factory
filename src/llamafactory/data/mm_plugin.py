@@ -201,17 +201,17 @@ class MMPluginMixin:
             num_video_tokens += message["content"].count(VIDEO_PLACEHOLDER) if len(videos) != 0 else 0
             num_audio_tokens += message["content"].count(AUDIO_PLACEHOLDER) if len(audios) != 0 else 0
 
-        if len(images) != num_image_tokens and self.image_token:
+        if len(images) != 0 and len(images) != num_image_tokens:
             raise ValueError(
                 f"The number of images does not match the number of {IMAGE_PLACEHOLDER} tokens in {messages}."
             )
 
-        if len(videos) != num_video_tokens and self.video_token:
+        if len(videos) != 0 and len(videos) != num_video_tokens:
             raise ValueError(
                 f"The number of videos does not match the number of {VIDEO_PLACEHOLDER} tokens in {messages}."
             )
 
-        if len(audios) != num_audio_tokens and self.audio_token:
+        if len(audios) != 0 and len(audios) != num_audio_tokens:
             raise ValueError(
                 f"The number of audios does not match the number of {AUDIO_PLACEHOLDER} tokens in {messages}."
             )
@@ -1519,14 +1519,14 @@ class Qwen2VLPlugin(BasePlugin):
 
         for message in messages:
             content = message["content"]
-            while IMAGE_PLACEHOLDER in content:
+            while IMAGE_PLACEHOLDER in content and len(images) != 0:
                 image_seqlen = image_grid_thw[num_image_tokens].prod() // merge_length if self.expand_mm_tokens else 1
                 content = content.replace(
                     IMAGE_PLACEHOLDER, f"<|vision_start|>{self.image_token * image_seqlen}<|vision_end|>", 1
                 )
                 num_image_tokens += 1
 
-            while VIDEO_PLACEHOLDER in content:
+            while VIDEO_PLACEHOLDER in content and len(videos) != 0:
                 video_seqlen = video_grid_thw[num_video_tokens].prod() // merge_length if self.expand_mm_tokens else 1
                 content = content.replace(
                     VIDEO_PLACEHOLDER, f"<|vision_start|>{self.video_token * video_seqlen}<|vision_end|>", 1

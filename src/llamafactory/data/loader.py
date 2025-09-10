@@ -35,6 +35,7 @@ from .processor import (
     UnsupervisedDatasetProcessor,
 )
 from webdataset.compat import WebDataset
+from webdataset.mix import RandomMix
 from webdataset.shardlists import split_by_node, split_by_worker
 
 if TYPE_CHECKING:
@@ -159,7 +160,12 @@ def _load_single_dataset(
         # dataset = dataset.map(dataset_processor)
         
         # 使用智能设备管理的处理函数，自动处理多机多卡场景
-        dataset_processor = get_process_mask_func()
+        if "LLaVA-ReCap-558K" in data_path:
+            from .data_utils import process_recaption_dataset
+            from functools import partial
+            dataset_processor = process_recaption_dataset
+        else:
+            dataset_processor = get_process_mask_func()
         
         dataset = WebDataset(
             data_files, 
@@ -168,7 +174,7 @@ def _load_single_dataset(
             workersplitter=split_by_worker
             ).shuffle(100).decode("pil").map(dataset_processor)
     else:
-        data_args.streaming = False
+        # data_args.streaming = False
         # with open(data_files[0]) as f:
         #     data = json.load(f)
         # dataset = Dataset.from_list(data)
@@ -184,8 +190,12 @@ def _load_single_dataset(
             trust_remote_code=model_args.trust_remote_code,
             streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
-        data_args.streaming = True
-        if data_args.streaming and dataset_attr.load_from in ["file", "hf_hub"]: # , "hf_hub"
+        if "LLaVA-ReCap-558K" in data_path:
+            from .data_utils import short_side_resize_and_random_crop
+            from functools import partial
+            dataset = dataset.map(partial(short_side_resize_and_random_crop, target_size=384), batched=False)
+        # data_args.streaming = True
+        if data_args.streaming and dataset_attr.load_from in ["file"]: # , "hf_hub"
             dataset = dataset.shuffle()
             dataset = dataset.to_iterable_dataset(num_shards=training_args.dataloader_num_workers)
 
@@ -301,6 +311,9 @@ def _get_preprocessed_dataset(
 
     if isinstance(dataset, WebDataset):
         dataset = dataset.map(dataset_processor.preprocess_dataset).unbatched()
+    elif isinstance(dataset, RandomMix):
+        for i in range(len(dataset.datasets)):
+            dataset.datasets[i] = dataset.datasets[i].map(dataset_processor.preprocess_dataset).unbatched()
     else:
         dataset = dataset.map(
             dataset_processor.preprocess_dataset,
