@@ -1,0 +1,42 @@
+# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+# 相依與環境資料夾
+node_modules/
+.venv/
+.env/
+__pycache__/
+
+# Build / 輸出檔
+dist/
+build/
+out/
+
+# Python 中介檔
+*.pyc
+
+# 測試快照 / coverage
+coverage/
+*.snap
+.nyc_output/
+
+# 大型靜態資料
+*.csv
+*.tsv
+*.log
+*.json
+*.sqlite
+*.db
+*.zip
+
+# 可選的資料夾
+public/
+/jfs/jensen/code/LLaMA-Factory/data
+
+# 其他
+*.pth
+*.pt
+*.pkl
+*.pickle
+*.jsonl
+*.jsonl.gz
+*.jsonl.bz2
+*.jsonl.xz
