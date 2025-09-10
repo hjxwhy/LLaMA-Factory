@@ -30,6 +30,7 @@ from trl import AutoModelForCausalLMWithValueHead
 
 from ..extras import logging
 from ..extras.misc import count_parameters, skip_check_imports, try_download_model_from_other_hub
+from ..extras.packages import is_transformers_version_greater_than
 from .adapter import init_adapter
 from .model_utils.liger_kernel import apply_liger_kernel
 from .model_utils.misc import register_autoclass
@@ -37,6 +38,11 @@ from .model_utils.mod import convert_pretrained_model_to_mod, load_mod_pretraine
 from .model_utils.unsloth import load_unsloth_pretrained_model
 from .model_utils.valuehead import load_valuehead_params
 from .patcher import patch_config, patch_model, patch_processor, patch_tokenizer, patch_valuehead_model
+
+
+if is_transformers_version_greater_than("4.46.0"):
+    from transformers import AutoModelForImageTextToText
+    from transformers.models.qwen2_5_omni import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniThinkerConfig
 
 
 if TYPE_CHECKING:
@@ -137,7 +143,11 @@ def load_model(
 ) -> "PreTrainedModel":
     r"""Load pretrained model."""
     init_kwargs = _get_init_kwargs(model_args)
-    config = load_config(model_args)
+    try:
+        config = load_config(model_args)
+    except Exception as e:
+        logger.info_rank0(f"Load Qwen2_5OmniThinkerConfig as config.")
+        config = Qwen2_5OmniThinkerConfig.from_pretrained(model_args.model_name_or_path, **init_kwargs)
     patch_config(config, tokenizer, model_args, init_kwargs, is_trainable)
     apply_liger_kernel(config, model_args, is_trainable, require_logits=(finetuning_args.stage not in ["pt", "sft"]))
 
@@ -164,6 +174,8 @@ def load_model(
                 load_class = AutoModelForSeq2SeqLM
             elif type(config) in AutoModelForTextToWaveform._model_mapping.keys():  # audio hack for qwen2_5_omni
                 load_class = AutoModelForTextToWaveform
+            elif type(config) == Qwen2_5OmniThinkerConfig:
+                load_class = Qwen2_5OmniThinkerForConditionalGeneration
             else:
                 load_class = AutoModelForCausalLM
 

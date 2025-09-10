@@ -1,0 +1,12 @@
+# Data mixing configuration files (contains private paths)
+scripts/data_mix_config.json
+scripts/**/data_mix_config*.json
+
+# Any custom config files
+scripts/*_config.json
+scripts/**/*_config.json
+
+# Temporary processing files
+scripts/temp/
+scripts/cache/ 
+data_mix_config_example.json

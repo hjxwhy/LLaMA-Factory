@@ -52,7 +52,7 @@ class DatasetConverter:
         else:
             medias = medias[:]
 
-        if self.dataset_attr.load_from in ["script", "file"]:
+        if self.dataset_attr.load_from in ["script", "file", "hf_hub"]:
             if isinstance(medias[0], str):
                 for i in range(len(medias)):
                     media_path = os.path.join(self.data_args.media_dir, medias[i])
@@ -165,13 +165,16 @@ class SharegptDatasetConverter(DatasetConverter):
             messages = messages[1:]
         else:
             system = example[self.dataset_attr.system] if self.dataset_attr.system else ""
+        
+        if len(messages) > 0 and messages[0][self.dataset_attr.role_tag] == self.dataset_attr.system_tag: # hard code for fix the double system message
+            messages = messages[1:]
 
         aligned_messages = []
         broken_data = False
         has_image_tag = any((message[self.dataset_attr.role_tag] == "user") and ("<image>" in message[self.dataset_attr.content_tag]) for message in messages)
         for turn_idx, message in enumerate(messages):
             if message[self.dataset_attr.role_tag] not in accept_tags[turn_idx % 2]:
-                logger.warning_rank0(f"Invalid role tag in {messages}.")
+                logger.warning(f"Invalid role tag in {example}. tag: {message[self.dataset_attr.role_tag]}, accept_tags: {accept_tags[turn_idx % 2]}")
                 broken_data = True
                 break
             
@@ -196,7 +199,7 @@ class SharegptDatasetConverter(DatasetConverter):
             aligned_messages.append(
                 {
                     "role": tag_mapping[message[self.dataset_attr.role_tag]],
-                    "content": message[self.dataset_attr.content_tag],
+                    "content": content,
                 }
             )
 

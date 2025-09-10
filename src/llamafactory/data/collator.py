@@ -26,6 +26,8 @@ import torch
 import torch.nn.functional as F
 from peft import PeftModel
 from transformers import DataCollatorForSeq2Seq
+import pickle
+import os
 
 from ..extras.constants import AUDIO_PLACEHOLDER, IGNORE_INDEX, IMAGE_PLACEHOLDER
 from ..extras.packages import is_pillow_available
@@ -206,8 +208,11 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
                 if feature_attention_mask is not None:  # FIXME: need to get video image lengths
                     audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
                     rope_index_kwargs["audio_seqlens"] = audio_feature_lengths  # prepare for input
-
-                features["position_ids"], rope_deltas = self.get_rope_func(**rope_index_kwargs)
+                try:
+                    features["position_ids"], rope_deltas = self.get_rope_func(**rope_index_kwargs)
+                except Exception as e:
+                    _save_debug_data_on_rope_error(e, rope_index_kwargs, features, mm_inputs, self.model, self.processor)
+                    raise IOError
                 features["rope_deltas"] = rope_deltas - (1 - rope_index_kwargs["attention_mask"]).sum(
                     dim=-1
                 ).unsqueeze(-1)
