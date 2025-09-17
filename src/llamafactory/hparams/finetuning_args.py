@@ -436,6 +436,10 @@ class FinetuningArguments(
         default=False,
         metadata={"help": "Whether or not to freeze the language model in MLLM training."},
     )
+    unfreeze_visual_head: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to unfreeze the visual head in MLLM training."},
+    )
     compute_accuracy: bool = field(
         default=False,
         metadata={"help": "Whether or not to compute the token-level accuracy at evaluation."},

@@ -163,6 +163,8 @@ def get_forbidden_modules(config: "PretrainedConfig", finetuning_args: "Finetuni
     if model_type in COMPOSITE_MODELS:
         if finetuning_args.freeze_vision_tower:
             vision_model_keys = COMPOSITE_MODELS[model_type].vision_model_keys
+            if finetuning_args.unfreeze_visual_head:
+                vision_model_keys = [key for key in vision_model_keys if "visual.head" not in key]
             logger.info_rank0(f"Set vision model not trainable: {vision_model_keys}.")
             forbidden_modules.update(vision_model_keys)
 

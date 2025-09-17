@@ -57,8 +57,23 @@
       "assistant_tag": "gpt"
     }
   },
+  "vlm_mix_robot_openx_training_v5": {
+    "hf_hub_url": "data/data/vlm_mix_robot_openx_training_v5",
+    "formatting": "sharegpt",
+    "columns": {
+      "messages": "messages",
+      "images": "images"
+    },
+    "tags": {
+      "role_tag": "role",
+      "content_tag": "content",
+      "user_tag": "user",
+      "assistant_tag": "assistant",
+      "system_tag":"system"
+    }
+  },
   "vlm_mix_robot_openx_training": {
-    "hf_hub_url": "data/data/vlm_mix_robot_openx_training_v3",
+    "hf_hub_url": "data/data/vlm_mix_robot_openx_training_v4",
     "formatting": "sharegpt",
     "columns": {
       "messages": "messages",

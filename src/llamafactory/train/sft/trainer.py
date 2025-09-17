@@ -105,6 +105,8 @@ class CustomSeq2SeqTrainer(Seq2SeqTrainer):
 
     @override
     def compute_loss(self, model, inputs, *args, **kwargs):
+        if is_deepspeed_zero3_enabled():
+            get_accelerator().empty_cache()
         return super().compute_loss(model, inputs, *args, **kwargs)
 
     @override

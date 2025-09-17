@@ -59,7 +59,8 @@ class DatasetConverter:
                     if "uniree" in media_path:
                         media_path = media_path.replace("uniree", "unitree")
                     if "open-x" in media_path:
-                        data_names = ["berkeley_autolab_ur5", "bridge", "fractal20220817_data", "jaco_play"]
+                        media_path = media_path.replace("train_v3", "train")
+                        data_names = ["berkeley_autolab_ur5", "bridge", "fractal20220817_data", "jaco_play", "libero"]
                         if any(data_name in media_path for data_name in data_names):
                             pass
                         else:

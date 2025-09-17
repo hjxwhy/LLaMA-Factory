@@ -7,11 +7,13 @@
 DEFAULT_MASTER_PORT="29500"
 DEFAULT_NPROC_PER_NODE=8
 DEFAULT_TRAIN_SCRIPT="src/train.py"
-DEFAULT_CONFIG_FILE="examples/train_full/qwen2_5vl_full_sft_72b.yaml"
+DEFAULT_CONFIG_FILE="examples/train_full/qwen2_5vl_full_sft_7b_dinov3.yaml"
 DEFAULT_CONDA_ENV="jensen_vlm"
 
 # Machine IP mapping (add more machines as needed)
 declare -A MACHINE_IP_MAP=(
+    ["unitree-8"]="10.3.1.146"
+    ["unitree-4"]="10.3.1.171"
     ["unitree-7"]="10.3.1.50"
     ["unitree-12"]="10.3.1.212"
     ["unitree-14"]="10.3.1.197"
@@ -248,6 +250,7 @@ start_training_on_node() {
         export NCCL_DEBUG=INFO
         export NCCL_ASYNC_ERROR_HANDLING=1
         export NCCL_TIMEOUT=86400000
+        export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
         nohup torchrun \
             --nnodes=$NNODES \
@@ -270,7 +273,7 @@ start_training_on_node() {
             export NCCL_DEBUG=INFO
             export NCCL_ASYNC_ERROR_HANDLING=1
             export NCCL_TIMEOUT=86400000  
-
+            export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
             nohup torchrun \
                 --nnodes=$NNODES \
                 --node_rank=$node_rank \

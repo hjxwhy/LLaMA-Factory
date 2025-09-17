@@ -407,7 +407,7 @@ class VisionTower(PreTrainedModel):
         
         assert self.head is not None, "head is not initialized"
         self.mlp_projector = nn.Sequential(
-            nn.Linear(backbone_out_dim, config.language_embed_dim),
+            nn.Linear(backbone_out_dim * (self.config.spatial_merge_size * self.config.spatial_merge_size), config.language_embed_dim),
             nn.GELU(),
             nn.Linear(config.language_embed_dim, config.language_embed_dim),
         )
@@ -441,34 +441,63 @@ class VisionTower(PreTrainedModel):
         grid_t, grid_h, grid_w = image_grid_thw[0] # 所有图像分辨率都一样
         channel = 3
         temporal_patch_size = 1
+        merge_size = self.config.spatial_merge_size
         patch_size = 16
 
+        # Reshape from flattened patches back to the pre-transpose format
         patches = pixel_values.reshape(
             bs * grid_t * grid_h * grid_w, 
-            channel, 
-            temporal_patch_size, 
-            patch_size, 
-            patch_size
+            channel * temporal_patch_size * patch_size * patch_size
         )
+        
+        # Reshape to match the format before transpose operation
         patches = patches.reshape(
-            bs*grid_t,
-            grid_h,
-            grid_w,
+            bs * grid_t,
+            grid_h // merge_size,
+            grid_w // merge_size,
+            merge_size,
+            merge_size,
             channel,
             temporal_patch_size,
             patch_size,
-            patch_size
+            patch_size,
         )
-    
         
-        restored_pixel_values = patches.permute(0, 4, 3, 1, 5, 2, 6).contiguous()
+        # Reverse the transpose operation: (0, 3, 6, 4, 7, 2, 1, 5, 8) -> (0, 6, 5, 1, 3, 7, 2, 4, 8)
+        patches = patches.permute(0, 6, 5, 1, 3, 7, 2, 4, 8).contiguous()
+        
+        # Reshape back to original format
+        patches = patches.reshape(
+            bs * grid_t,
+            temporal_patch_size,
+            channel,
+            grid_h // merge_size,
+            merge_size,
+            patch_size,
+            grid_w // merge_size,
+            merge_size,
+            patch_size,
+        )
+        
+        # Merge spatial dimensions to restore original image
+        restored_pixel_values = patches.permute(0, 2, 1, 3, 4, 5, 6, 7, 8).contiguous()
         restored_pixel_values = restored_pixel_values.reshape(
-                                    bs,
-                                    grid_t * temporal_patch_size,
-                                    channel,
-                                    grid_h * patch_size,
-                                    grid_w * patch_size
-                                ).squeeze(1) # no temporal
+            bs * grid_t,
+            channel,
+            temporal_patch_size,
+            grid_h // merge_size * merge_size * patch_size,
+            grid_w // merge_size * merge_size * patch_size
+        )
+        
+        # Final reshape to get (bs, channel, height, width)
+        restored_pixel_values = restored_pixel_values.reshape(
+            bs,
+            grid_t * temporal_patch_size,
+            channel,
+            grid_h * patch_size,
+            grid_w * patch_size
+        ).squeeze(1)
+        
         return restored_pixel_values
     
     def get_backbone_features(
@@ -559,6 +588,11 @@ class VisionTower(PreTrainedModel):
                 raise ValueError(
                     f"Unknown patch tokens pooler type: {self.patch_tokens_pooler_type}"
                 )
+        patch_tokens = patch_tokens.reshape(-1, image_grid_thw[0][0], image_grid_thw[0][1], image_grid_thw[0][2], patch_tokens.shape[-1])
+        merge_size = self.config.spatial_merge_size
+        patch_tokens = patch_tokens.reshape(-1, image_grid_thw[0][0], image_grid_thw[0][1] // merge_size, merge_size, image_grid_thw[0][2] // merge_size, merge_size, patch_tokens.shape[-1])
+        patch_tokens = patch_tokens.permute(0, 1, 2, 4, 3, 5, 6).reshape(-1, image_grid_thw[0][0], image_grid_thw[0][1] // merge_size, image_grid_thw[0][2] // merge_size, merge_size * merge_size * patch_tokens.shape[-1])
+        patch_tokens = patch_tokens.reshape(-1, patch_tokens.shape[-1])
         patch_tokens = self.mlp_projector(patch_tokens)
         return torch.cat(features, dim=-1), patch_tokens, backbone_patch_tokens
 

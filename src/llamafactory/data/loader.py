@@ -190,10 +190,10 @@ def _load_single_dataset(
             trust_remote_code=model_args.trust_remote_code,
             streaming=data_args.streaming and dataset_attr.load_from != "file",
         )
-        if "LLaVA-ReCap-558K" in data_path:
-            from .data_utils import short_side_resize_and_random_crop
-            from functools import partial
-            dataset = dataset.map(partial(short_side_resize_and_random_crop, target_size=384), batched=False)
+        # if "LLaVA-ReCap-558K" in data_path:
+        #     from .data_utils import short_side_resize_and_random_crop
+        #     from functools import partial
+        #     dataset = dataset.map(partial(short_side_resize_and_random_crop, target_size=384), batched=False)
         # data_args.streaming = True
         if data_args.streaming and dataset_attr.load_from in ["file"]: # , "hf_hub"
             dataset = dataset.shuffle()
