@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from ...extras import logging
 from ...extras.constants import IGNORE_INDEX
 from ..data_utils import is_none
-from .processor_utils import DatasetProcessor, greedy_knapsack, infer_seqlen
+from .processor_utils import DatasetProcessor, greedy_knapsack, infer_seqlen, infer_seqlen_v2
 
 
 if TYPE_CHECKING:
@@ -61,15 +61,23 @@ class SupervisedDatasetProcessor(DatasetProcessor):
             encoded_pairs = encoded_pairs[::-1] # high priority for last turns
 
         for turn_idx, (source_ids, target_ids) in enumerate(encoded_pairs):
-            if total_length + len(source_ids) + len(target_ids) > self.data_args.cutoff_len:
-                input_ids, labels = None, None # HACK: for multi model data too long will raise error, return None for abort this example
-                break
+            # if total_length + len(source_ids) + len(target_ids) > self.data_args.cutoff_len:
+            #     input_ids, labels = None, None # HACK: for multi model data too long will raise error, return None for abort this example
+            #     break
+            if self.data_args.cutoff_len - total_length < len(source_ids):
+                break # 优先保留提问，因为如果截断了图像就会训练报错
+
             if total_length >= self.data_args.cutoff_len:
                 break
 
-            source_len, target_len = infer_seqlen(
+            source_len, target_len = infer_seqlen_v2(
                 len(source_ids), len(target_ids), self.data_args.cutoff_len - total_length
             )
+
+            # source_len, target_len = infer_seqlen(
+            #     len(source_ids), len(target_ids), self.data_args.cutoff_len - total_length
+            # )
+
             source_ids = source_ids[:source_len]
             target_ids = target_ids[:target_len]
             total_length += source_len + target_len
@@ -130,8 +138,8 @@ class SupervisedDatasetProcessor(DatasetProcessor):
                 videos=examples["_videos"][i] or [],
                 audios=examples["_audios"][i] or [],
             )
-            if input_ids is None:
-                logger.warning_rank0(f"Dropped lengthy example with length  > {self.data_args.cutoff_len}.")
+            if input_ids is None or len(input_ids) < 1:
+                # logger.warning_rank0(f"Dropped lengthy example with length  > {self.data_args.cutoff_len}.")
                 continue
             model_inputs["input_ids"].append(input_ids)
             model_inputs["attention_mask"].append([1] * len(input_ids))
